@@ -41,6 +41,9 @@ function handleActionApi(url) {
     const links = Object.keys(KNOWN).map((t) => `<a href="/wiki/${encodeURIComponent(t.replace(/ /g, '_'))}" title="${t}">${t}</a>`).join(' · ');
     return { parse: { title: page, text: `<div class="mw-parser-output"><p><b>${page}</b> est un article. Liens : ${links}</p><p>Autre <a href="/wiki/Fichier:Truc.jpg">fichier</a> et <a href="https://example.org">externe</a>.</p></div>` } };
   }
+  if (action === 'query' && q.get('list') === 'mostviewed') {
+    return { batchcomplete: true, query: { mostviewed: TOP.items[0].articles.map((a) => ({ ns: /^(Wikipédia|Spécial):/.test(a.article) ? 4 : 0, title: a.article.replace(/_/g, ' '), count: a.views })) } };
+  }
   if (action === 'query') {
     const prop = q.get('prop') || '';
     if (q.get('generator') === 'search') {

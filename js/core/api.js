@@ -1,7 +1,8 @@
 /* Accès aux API Wikimedia : Wikipédia (REST + action), pageviews, Wikidata (SPARQL), Commons. */
 WJ.api = (() => {
-  const UA = 'WikiJeux/1.0 (https://github.com/Madec01/wiki)';
   const LANG = 'fr';
+  // Pas d'en-tête personnalisé (Api-User-Agent) : il déclencherait une requête CORS préalable (OPTIONS)
+  // que l'API des pages vues refuse (405). Avec seulement des en-têtes simples, aucune vérification préalable.
   const inflight = new Map();
 
   class ApiError extends Error {
@@ -15,7 +16,7 @@ WJ.api = (() => {
       let lastErr;
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
-          const res = await fetch(url, { headers: { 'Api-User-Agent': UA, Accept: 'application/json', ...headers } });
+          const res = await fetch(url, { headers: { Accept: 'application/json', ...headers } });
           if (res.status === 429 || res.status >= 500) throw new ApiError(`Wikipédia répond ${res.status}`, res.status);
           if (!res.ok) throw new ApiError(`Erreur ${res.status}`, res.status);
           return await res.json();
@@ -86,6 +87,12 @@ WJ.api = (() => {
     return (data?.items?.[0]?.articles || []).map((a) => ({ title: a.article.replace(/_/g, ' '), views: a.views, rank: a.rank }));
   }
 
+  /** Pages les plus vues de la veille via l'API action (secours si l'API metrics est bloquée, par un bloqueur de pub par exemple). */
+  async function mostViewed(lang = LANG) {
+    const d = await query({ action: 'query', list: 'mostviewed', pvimlimit: 'max' }, lang);
+    return (d?.query?.mostviewed || []).filter((a) => a.ns === 0).map((a, i) => ({ title: a.title, views: a.count, rank: i + 1 }));
+  }
+
   /** HTML d'un article (pour la course de liens). */
   async function parse(title, lang = LANG) {
     const d = await query({ action: 'parse', page: title, prop: 'text|displaytitle', redirects: 1, disabletoc: 1, disableeditsection: 1, mobileformat: 1 }, lang);
@@ -147,5 +154,5 @@ WJ.api = (() => {
     ppprop: 'wikibase_item|disambiguation', coprimary: 'primary',
   };
 
-  return { ApiError, getJSON, query, summary, randomSummary, suggest, resolve, pages, searchPages, topViews, parse, linksBetween, outgoingLinks, sparql, qidFromUri, imageCredit, PAGE_PROPS, LANG };
+  return { ApiError, getJSON, query, summary, randomSummary, suggest, resolve, pages, searchPages, topViews, mostViewed, parse, linksBetween, outgoingLinks, sparql, qidFromUri, imageCredit, PAGE_PROPS, LANG };
 })();

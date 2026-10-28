@@ -316,6 +316,17 @@ module.exports = ({ page, url, check, live }) => {
       }
       await wait('.end');
     },
+    async secours_sans_metrics() {
+      if (live) return;
+      await page.route(/wikimedia\.org\/api\/rest_v1\/metrics/, (r) => r.fulfill({ status: 405, body: '' }));
+      await goto('#/');
+      await ev(() => WJ.store.clearCache());
+      await goto('#/image?go=1');
+      await wait('.image-frame img', 30000);
+      check(true, 'partie lancée sans l’API metrics (secours mostviewed)');
+      await page.unroute(/wikimedia\.org\/api\/rest_v1\/metrics/);
+      await ev(() => WJ.store.clearCache());
+    },
     async image_defi_du_jour() {
       await goto('#/image?daily=1&go=1');
       await wait('.image-frame img', 30000);

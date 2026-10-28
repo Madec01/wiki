@@ -56,8 +56,11 @@ WJ.pool = (() => {
   /** Pages les plus lues d'un jour, filtrées (titres de service, actualité), avec le nombre de vues. */
   async function popularTitles(day = viewsDay(), { strict = true, max = 400 } = {}) {
     return WJ.store.cached(`top.${day}.${strict ? 's' : 'l'}`, 36e5 * 24 * 3, async () => {
-      let list;
-      try { list = await WJ.api.topViews(day); } catch (e) { list = await WJ.api.topViews(dayKey(-3)); }
+      let list = null;
+      // 1. API metrics du jour demandé ; 2. la veille ; 3. list=mostviewed sur Wikipédia (si l'API metrics est bloquée)
+      try { list = await WJ.api.topViews(day); } catch (e) { /* on tente la suite */ }
+      if (!list) { try { list = await WJ.api.topViews(dayKey(-3)); } catch (e) { /* idem */ } }
+      if (!list) list = await WJ.api.mostViewed();
       return list.filter((a) => titleOk(a.title, strict)).slice(0, max);
     });
   }
