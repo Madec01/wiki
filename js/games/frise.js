@@ -6,7 +6,7 @@
     { id: 'classique', name: 'Classique', icon: '🕰️', cards: 10, lives: 3, desc: '10 cartes, 3 erreurs permises' },
     { id: 'marathon', name: 'Marathon', icon: '🏃', cards: 20, lives: 5, desc: '20 cartes, 5 erreurs permises' },
     { id: 'sansfilet', name: 'Sans filet', icon: '🪢', cards: 10, lives: 1, desc: '10 cartes, une seule erreur' },
-    { id: 'classement', name: 'Classement', icon: '🧩', cards: 8, lives: 0, order: true, desc: '8 cartes à ranger de la plus ancienne à la plus récente, puis on compte les justes' },
+    { id: 'classement', name: 'Classement', icon: '🧩', cards: 8, lives: 0, order: true, desc: '8 cartes à ranger de la plus ancienne à la plus récente ; à chaque validation on te dit seulement combien sont justes' },
   ];
   const PTS = 10;
   const KIND_LABEL = { naissance: '👤 naissance', sortie: '🎬 sortie', creation: '🏛️ création', debut: '📅 début', evenement: '📅 événement' };
@@ -47,7 +47,7 @@
         } catch (e) { WJ.ui.view(root, WJ.ui.errorBox(e, () => launch({ theme, mode: modeId, difficulty }))); }
       };
       if (params.go) return launch({ theme: params.theme || 'populaire', mode: params.mode || 'classique', difficulty: params.difficulty || WJ.store.settings().difficulty || 'normal' });
-      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme: params.theme || 'populaire', modes: MODES, defaultMode: params.mode || 'classique', difficulty: true, rules: [`${PTS} pts par carte bien placée, +20 si tout est juste.`, 'Une carte mal placée est déplacée au bon endroit et la frise continue.', 'Mode Classement : toutes les cartes sont visibles, range-les puis valide ; on compte les justes et les fausses.', 'Les dates viennent de Wikidata : naissance, sortie, construction ou date de l’événement.'], onStart: launch }));
+      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme: params.theme || 'populaire', modes: MODES, defaultMode: params.mode || 'classique', difficulty: true, rules: [`${PTS} pts par carte bien placée, +20 si tout est juste.`, 'Une carte mal placée est déplacée au bon endroit et la frise continue.', 'Mode Classement : range toutes les cartes en les faisant glisser, puis valide ; on te dit seulement combien sont bien placées. 100 pts si c’est bon du premier coup, −10 par essai supplémentaire.', 'Les dates viennent de Wikidata : naissance, sortie, construction ou date de l’événement.'], onStart: launch }));
     },
   };
 
@@ -108,46 +108,114 @@
     }
     render();
   }
-  /** Mode Classement : toutes les cartes sont visibles, on les range avec les flèches puis on valide. */
+  /** Mode Classement : toutes les cartes sont visibles, on les range en les faisant glisser, puis on valide. Seuls les nombres de justes et de fausses sont donnés. */
   function playOrder(root, cards, theme, mode, difficulty) {
     const shell = WJ.ui.shell(root, { title: game.name, icon: game.icon, rounds: 0 });
-    const order = cards.slice();
-    let finished = false;
+    let order = cards.slice();
+    let attempts = 0, finished = false, selected = null;
+    const history = [];
     const list = el('div', { class: 'order-list' });
+    const attemptsEl = el('div', { class: 'attempts' });
     const result = el('div');
     const validate = WJ.ui.button('Valider l’ordre', () => check(), 'btn btn-primary btn-lg');
-    shell.content.append(el('p', { class: 'muted', style: { textAlign: 'center' }, text: 'Range les cartes de la plus ancienne (1) à la plus récente avec les flèches, puis valide.' }), list, el('div', { class: 'row center' }, [validate]), result);
-    const move = (i, d) => { const j = i + d; if (j < 0 || j >= order.length) return; [order[i], order[j]] = [order[j], order[i]]; render(); };
-    function render(verdict = null) {
-      list.innerHTML = '';
-      order.forEach((c, i) => {
-        const v = verdict ? verdict[i] : null;
-        const card = el('div', { class: 'tl-card' + (v === null ? '' : v ? ' placed-ok' : ' placed-ko') }, [
-          el('span', { class: 'pos', text: String(i + 1) }),
-          WJ.ui.image(c.image, '', ''), el('div', { text: c.title, style: { fontWeight: 600 } }),
-          el('div', { class: 'muted', style: { fontSize: '.68rem' }, text: KIND_LABEL[c.kind] || '' }),
-          el('div', { class: 'year', text: verdict ? fmtYear(c.year) : '?' }),
-          verdict ? null : el('div', { class: 'order-arrows' }, [
-            el('button', { type: 'button', text: '◀', 'aria-label': 'Vers la gauche', disabled: i === 0, onclick: () => move(i, -1) }),
-            el('button', { type: 'button', text: '▶', 'aria-label': 'Vers la droite', disabled: i === order.length - 1, onclick: () => move(i, 1) }),
-          ]),
-        ]);
-        list.append(card);
-      });
+    const giveUp = WJ.ui.button('Abandonner', () => finish(false), 'btn btn-ghost');
+    const actions = el('div', { class: 'row center' }, [validate, giveUp]);
+    const pts = () => Math.max(10, 100 - 10 * (attempts - 1));
+    shell.content.append(el('p', { class: 'muted', style: { textAlign: 'center' }, text: 'Range les cartes de la plus ancienne (1) à la plus récente : fais-les glisser, ou touche une carte puis sa destination. Valide autant de fois que nécessaire : on te dit seulement combien sont bien placées.' }), list, attemptsEl, actions, result);
+
+    const cardById = new Map();
+    function cardEl(c) {
+      const node = el('div', { class: 'tl-card draggable', dataset: { qid: c.qid } }, [
+        el('span', { class: 'pos' }), WJ.ui.image(c.image, '', ''), el('div', { text: c.title, style: { fontWeight: 600 } }),
+        el('div', { class: 'muted', style: { fontSize: '.68rem' }, text: KIND_LABEL[c.kind] || '' }), el('div', { class: 'year', text: '?' }),
+      ]);
+      node.querySelector('img').draggable = false;
+      attachDrag(node, c);
+      return node;
     }
+    function render() {
+      list.innerHTML = '';
+      order.forEach((c) => { const n = cardById.get(c.qid) || cardEl(c); cardById.set(c.qid, n); n.classList.toggle('selected', selected === c); list.append(n); });
+      numbering();
+    }
+    function numbering() { [...list.children].filter((n) => !n.classList.contains('dragging')).forEach((n, i) => { const p = n.querySelector('.pos'); if (p) p.textContent = String(i + 1); }); }
+    function syncFromDom() { order = [...list.children].filter((n) => n.dataset.qid).map((n) => cards.find((c) => c.qid === n.dataset.qid)).filter(Boolean); }
+    function moveTo(card, index) {
+      const from = order.indexOf(card);
+      if (from < 0) return;
+      order.splice(from, 1); order.splice(index, 0, card);
+      render();
+    }
+
+    /** Glisser-déposer au pointeur (souris et tactile) + sélection par touches successives.
+     *  La carte saisie ne bouge jamais dans le DOM pendant le glissé (sinon le navigateur relâche la capture du pointeur) :
+     *  un emplacement vide se déplace à sa place, et la carte y est remise au relâchement. */
+    function attachDrag(node, card) {
+      let startX = 0, startY = 0, dragging = false, ghost = null, slot = null, pid = null;
+      node.addEventListener('pointerdown', (e) => {
+        if (finished || e.button > 0) return;
+        startX = e.clientX; startY = e.clientY; pid = e.pointerId; dragging = false;
+        try { node.setPointerCapture(pid); } catch (err) { /* ignore */ }
+      });
+      node.addEventListener('pointermove', (e) => {
+        if (pid === null || e.pointerId !== pid || finished) return;
+        const dx = e.clientX - startX, dy = e.clientY - startY;
+        if (!dragging) {
+          if (Math.hypot(dx, dy) < 8) return;
+          dragging = true;
+          ghost = node.cloneNode(true); ghost.classList.add('ghost'); ghost.style.width = node.offsetWidth + 'px'; document.body.append(ghost);
+          slot = el('div', { class: 'tl-card slot', style: { width: node.offsetWidth + 'px', height: node.offsetHeight + 'px' } });
+          node.before(slot); node.classList.add('dragging');
+        }
+        ghost.style.left = (e.clientX - node.offsetWidth / 2) + 'px'; ghost.style.top = (e.clientY - 30) + 'px';
+        const under = document.elementsFromPoint(e.clientX, e.clientY).find((x) => x.classList && x.classList.contains('tl-card') && x !== ghost && x !== node && x !== slot && list.contains(x));
+        if (under) {
+          const kids = [...list.children];
+          if (kids.indexOf(slot) < kids.indexOf(under)) under.after(slot); else under.before(slot);
+          numbering();
+        }
+      });
+      const end = (e) => {
+        if (pid === null || e.pointerId !== pid) return;
+        try { node.releasePointerCapture(pid); } catch (err) { /* ignore */ }
+        pid = null;
+        if (dragging) {
+          dragging = false; ghost?.remove(); ghost = null; node.classList.remove('dragging');
+          if (slot) { slot.replaceWith(node); slot = null; }
+          syncFromDom(); selected = null; render();
+        } else if (!finished && e.type === 'pointerup') {
+          // Toucher : sélectionner, puis toucher la destination
+          if (selected && selected !== card) { const target = order.indexOf(card); const c = selected; selected = null; moveTo(c, target); }
+          else { selected = selected === card ? null : card; render(); }
+        }
+      };
+      node.addEventListener('pointerup', end);
+      node.addEventListener('pointercancel', end);
+    }
+
     function check() {
-      if (finished) return; finished = true;
-      validate.remove();
+      if (finished) return;
+      attempts++;
       const sorted = order.slice().sort((a, b) => a.year - b.year);
-      const verdict = order.map((c, i) => c.year === sorted[i].year);
-      const exact = verdict.filter(Boolean).length;
-      let score = exact * PTS + (exact === order.length ? 20 : 0);
-      render(verdict);
+      const exact = order.filter((c, i) => c.year === sorted[i].year).length;
+      history.push(exact);
+      shell.setRound(attempts, 0);
+      attemptsEl.innerHTML = '';
+      attemptsEl.append(el('div', { class: 'found-list' }, history.map((n, i) => el('span', { text: `Essai ${i + 1} : ${n}/${order.length} juste${n > 1 ? 's' : ''}`, class: i === history.length - 1 ? 'on' : '' }))));
+      if (exact === order.length) return finish(true);
+      WJ.ui.toast(`${exact} bien placée${exact > 1 ? 's' : ''}, ${order.length - exact} à revoir. ${pts() - 10 >= 10 ? `Prochain essai : ${pts() - 10} pts max.` : ''}`, exact >= order.length / 2 ? 'info' : 'ko', 2600);
+    }
+    function finish(ok) {
+      if (finished) return; finished = true;
+      const score = ok ? pts() : 0;
+      const sorted = order.slice().sort((a, b) => a.year - b.year);
+      order = sorted; selected = null; render();
+      [...list.children].forEach((n, i) => { n.classList.remove('draggable'); n.querySelector('.year').textContent = fmtYear(sorted[i].year); n.classList.add('placed-ok'); });
+      actions.remove();
       shell.setScore(score);
-      const results = order.map((c, i) => ({ ok: verdict[i], points: verdict[i] ? PTS : 0, title: c.title, label: `${i + 1}. ${c.title} (${fmtYear(c.year)})` }));
-      result.append(el('div', { class: 'reveal ' + (exact === order.length ? 'ok' : exact ? '' : 'ko') }, [
-        el('h3', { text: `${exact} juste${exact > 1 ? 's' : ''}, ${order.length - exact} fau${order.length - exact > 1 ? 'sses' : 'sse'}` }),
-        el('p', { class: 'muted', text: 'Bon ordre : ' + sorted.map((c) => `${c.title} (${fmtYear(c.year)})`).join(' → ') }),
+      const results = sorted.map((c, i) => ({ ok, points: ok ? Math.round(score / sorted.length) : 0, title: c.title, label: `${i + 1}. ${c.title} (${fmtYear(c.year)})` }));
+      result.append(el('div', { class: 'reveal ' + (ok ? 'ok' : 'ko') }, [
+        el('h3', { text: ok ? `Bon ordre trouvé en ${attempts} essai${attempts > 1 ? 's' : ''} !` : 'Voici le bon ordre' }),
         el('p', { class: 'pts', text: `+${score} pts` }),
       ]));
       WJ.ui.waitNext(result, 'Voir le résultat').then(() => {
@@ -155,11 +223,11 @@
         const variant = [theme, mode.id, difficulty !== 'normal' ? difficulty : null].filter(Boolean).join(':');
         const best = WJ.store.best(game.id, variant)?.score ?? null;
         const isBest = WJ.store.recordScore(game.id, variant, score);
-        WJ.ui.view(root, WJ.ui.endScreen({ game: game.name, variantLabel: `${WJ.pool.theme(theme).name}, ${mode.name}`, results, total: score, isBest, best, shareText: `WikiJeux · ${game.name} · ${mode.name}\n${results.map((r) => (r.ok ? '🟩' : '🟥')).join('')} ${exact}/${order.length} justes, ${score} pts\n${location.href.split('#')[0]}#/frise`, onReplay: () => { location.hash = `#/frise?theme=${theme}&mode=${mode.id}&difficulty=${difficulty}&go=1&r=${Date.now()}`; } }));
+        WJ.ui.view(root, WJ.ui.endScreen({ game: game.name, variantLabel: `${WJ.pool.theme(theme).name}, ${mode.name}`, results, total: score, isBest, best, shareText: `WikiJeux · ${game.name} · ${mode.name}\n${ok ? `🧩 bon ordre en ${attempts} essai${attempts > 1 ? 's' : ''}` : '🏳️ abandon'} · ${score} pts\n${location.href.split('#')[0]}#/frise`, onReplay: () => { location.hash = `#/frise?theme=${theme}&mode=${mode.id}&difficulty=${difficulty}&go=1&r=${Date.now()}`; } }));
       });
     }
     render();
-    WJ.debugOrder = { order, move };
+    WJ.debugOrder = { get order() { return order; }, setOrder: (qids) => { order = qids.map((q) => cards.find((c) => c.qid === q)); render(); }, moveTo };
   }
 
   WJ.register(game);

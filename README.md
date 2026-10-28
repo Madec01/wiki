@@ -21,7 +21,7 @@ Treize jeux en français construits sur Wikipédia, Wikimedia Commons et Wikidat
 | 📈 **Plus ou moins de vues** | Lequel des deux articles a été le plus lu ? Modes 3 vies, Survie ou 10 duels. |
 | 🎂 **Qui est le plus vieux ?** | Deux personnalités de la même époque (moins de 30 ans d’écart en Normal, 12 ans et sans photo en Difficile), clique sur celle née en premier. |
 | 🏘️ **Combien d’habitants ?** | D’abord plus ou moins peuplée qu’une ville de référence (30 pts), puis estimation au curseur (jusqu’à 70 pts). |
-| 🕰️ **Frise chronologique** | Place chaque carte (naissance, sortie de film, construction…) au bon endroit dans la frise. Modes Classique, Marathon, Sans filet, et Classement où l’on range toutes les cartes avant de valider. |
+| 🕰️ **Frise chronologique** | Place chaque carte (naissance, sortie de film, construction…) au bon endroit dans la frise. Modes Classique, Marathon, Sans filet, et Classement où l’on range toutes les cartes en les faisant glisser puis on valide : seul le nombre de cartes bien placées est donné, le but étant de trouver l’ordre en un minimum d’essais. |
 
 ### Explorer
 | Jeu | Principe |

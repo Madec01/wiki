@@ -20,9 +20,9 @@ WJ.pool = (() => {
 
   /** Niveaux : profondeur du tirage dans le classement par liens entrants, et taille du vivier populaire. */
   const DIFFICULTIES = [
-    { id: 'facile', name: 'Facile', icon: '🙂', desc: 'Les sujets les plus connus, indice gratuit', offset: 120, popular: 100 },
-    { id: 'normal', name: 'Normal', icon: '😎', desc: 'Sujets connus', offset: 250, popular: 200 },
-    { id: 'difficile', name: 'Difficile', icon: '🔥', desc: 'Sujets plus pointus', offset: 700, popular: 400 },
+    { id: 'facile', name: 'Facile', icon: '🙂', desc: 'Les sujets les plus connus, indice gratuit', offset: 200, popular: 150 },
+    { id: 'normal', name: 'Normal', icon: '😎', desc: 'Sujets connus', offset: 450, popular: 300 },
+    { id: 'difficile', name: 'Difficile', icon: '🔥', desc: 'Sujets plus pointus', offset: 1200, popular: 500 },
   ];
   const difficulty = (id) => DIFFICULTIES.find((d) => d.id === id) || DIFFICULTIES[1];
 
@@ -87,7 +87,7 @@ WJ.pool = (() => {
   const viewsDay = (offset = -2) => dayKey(offset);
 
   /** Pages les plus lues d'un jour, filtrées (titres de service, actualité), avec le nombre de vues. */
-  async function popularTitles(day = viewsDay(), { strict = true, max = 400 } = {}) {
+  async function popularTitles(day = viewsDay(), { strict = true, max = 700 } = {}) {
     return WJ.store.cached(`top.${day}.${strict ? 's' : 'l'}`, 36e5 * 24 * 3, async () => {
       let list = null;
       // 1. API metrics du jour demandé ; 2. la veille ; 3. list=mostviewed sur Wikipédia (si l'API metrics est bloquée)
@@ -110,7 +110,7 @@ WJ.pool = (() => {
 
   /** Entrées d'un thème, tirées parmi les articles les plus liés (donc connus), avec un décalage aléatoire. */
   async function themedEntries(th, { random = Math.random, limit = 50, maxOffset = 250 } = {}) {
-    const offset = Math.floor(random() * maxOffset);
+    const offset = Math.floor(random() * Math.max(1, Math.ceil(maxOffset / limit))) * limit; // fenêtres alignées, sans recouvrement
     const pages = await WJ.api.searchPages(th.q, { sort: 'incoming_links_desc', offset, limit, props: WJ.api.PAGE_PROPS });
     return pages.sort((a, b) => (a.index || 0) - (b.index || 0)).map((p) => toEntry(p, { theme: th.id })).filter(Boolean);
   }
@@ -123,24 +123,26 @@ WJ.pool = (() => {
     const th = theme(themeId);
     const diff = difficulty(diffId);
     const random = seed ? rng(seed) : Math.random;
-    const usable = (list) => list.filter((e) => fits(e, need) && themeOk(th, e, diff.id)).length;
+    // Déjà joués récemment : on les garde pour la fin, pour varier les parties
+    const recent = seed ? new Set() : new Set(WJ.store.get('seen', []));
+    const usable = (list) => list.filter((e) => fits(e, need) && themeOk(th, e, diff.id) && !recent.has(e.title)).length;
     let entries = [];
     if (th.id === 'populaire') {
-      entries = (await popularEntries(viewsDay(), { strict: true, limit: Math.max(200, diff.popular) })).slice().sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, diff.popular);
+      entries = (await popularEntries(viewsDay(), { strict: true, limit: Math.max(300, diff.popular) })).slice().sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, diff.popular);
     } else {
+      // Plusieurs fenêtres aléatoires dans le classement, jusqu'à avoir assez de sujets jamais joués
       entries = await themedEntries(th, { random, maxOffset: diff.offset });
-      for (let i = 0; i < 2 && usable(entries) < count * 2; i++) {
-        entries = entries.concat(await themedEntries(th, { random, maxOffset: i === 0 ? diff.offset : Math.max(60, diff.offset * 2) }));
+      for (let i = 0; i < 3 && usable(entries) < count * 2; i++) {
+        entries = entries.concat(await themedEntries(th, { random, maxOffset: Math.round(diff.offset * (1 + i * 0.5)) }));
       }
     }
     const seen = new Set();
     const ok = entries.filter((e) => fits(e, need) && themeOk(th, e, diff.id) && !exclude.has(e.title) && !seen.has(e.title) && seen.add(e.title));
-    // Déjà joués récemment : on les garde pour la fin, pour varier les parties
-    const recent = seed ? new Set() : new Set(WJ.store.get('seen', []));
-    const rank = (e) => (preferred(th, e, diff.id) ? 0 : 2) + (recent.has(e.title) ? 1 : 0);
+    // Jamais joués d'abord (préférés puis les autres), déjà joués ensuite
+    const rank = (e) => (recent.has(e.title) ? 2 : 0) + (preferred(th, e, diff.id) ? 0 : 1);
     const groups = [0, 1, 2, 3].map((r) => shuffle(ok.filter((e) => rank(e) === r), random));
     const picked = groups.flat().slice(0, count);
-    if (!seed && picked.length) WJ.store.set('seen', [...picked.map((e) => e.title), ...WJ.store.get('seen', []).filter((t) => !picked.some((e) => e.title === t))].slice(0, 400));
+    if (!seed && picked.length) WJ.store.set('seen', [...picked.map((e) => e.title), ...WJ.store.get('seen', []).filter((t) => !picked.some((e) => e.title === t))].slice(0, 1000));
     if (!picked.length) throw new Error('Aucun article jouable trouvé pour ce thème. Réessaie dans un instant.');
     return picked;
   }

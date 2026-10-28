@@ -341,11 +341,30 @@ module.exports = ({ page, url, check, live }) => {
       await wait('.order-list .tl-card', 30000);
       const n = await count('.order-list .tl-card');
       check(n >= 5, `classement : ${n} cartes visibles`);
-      await page.locator('.order-arrows button:not([disabled])').first().click();
-      check((await count('.order-list .tl-card')) === n, 'déplacement sans perte de carte');
+      // sélection par touches : première carte puis dernière → déplacement
+      const firstTitle = await text('.order-list .tl-card:first-child div');
+      await page.locator('.order-list .tl-card').first().click();
+      check((await count('.order-list .tl-card.selected')) === 1, 'carte sélectionnée');
+      await page.locator('.order-list .tl-card').last().click();
+      check((await text('.order-list .tl-card:last-child div')) === firstTitle && (await count('.order-list .tl-card')) === n, 'carte déplacée en dernière position par touches');
+      // glisser-déposer : la dernière carte vers la première
+      const a = await page.locator('.order-list .tl-card').last().boundingBox();
+      const b = await page.locator('.order-list .tl-card').first().boundingBox();
+      await page.mouse.move(a.x + a.width / 2, a.y + 20); await page.mouse.down();
+      await page.mouse.move(a.x + a.width / 2 + 15, a.y + 25, { steps: 3 }); await page.mouse.move(b.x + b.width / 2, b.y + 20, { steps: 8 }); await page.mouse.up();
+      await page.waitForTimeout(100);
+      check((await text('.order-list .tl-card:first-child div')) === firstTitle, 'glisser-déposer vers la première position');
+      // un essai faux : seulement les nombres, pas de couleurs
+      const years = await ev(() => WJ.debugOrder.order.map((c) => [c.qid, c.year]));
+      const sortedQ = years.slice().sort((x, y) => x[1] - y[1]).map((x) => x[0]);
+      await ev((q) => WJ.debugOrder.setOrder(q), sortedQ.slice().reverse());
       await page.click('button:has-text("Valider l’ordre")');
-      await wait('.reveal');
-      check(/\d+ juste/.test(await text('.reveal h3')), 'bilan justes / fausses: ' + (await text('.reveal h3')));
+      await page.waitForTimeout(100);
+      check((await count('.placed-ok, .placed-ko')) === 0 && /Essai 1 : \d+\//.test(await text('.attempts')), 'après un essai faux : seulement le compte: ' + (await text('.attempts')));
+      await ev((q) => WJ.debugOrder.setOrder(q), sortedQ);
+      await page.click('button:has-text("Valider l’ordre")');
+      await wait('.reveal.ok');
+      check((await text('.reveal h3')).includes('2 essais') && (await text('.reveal .pts')).includes('+90'), 'bon ordre au 2e essai → 90 pts: ' + (await text('.reveal .pts')));
       await page.click('.next');
       await wait('.end');
     },
