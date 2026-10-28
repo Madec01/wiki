@@ -18,6 +18,38 @@ WJ.pool = (() => {
   ];
   const theme = (id) => THEMES.find((t) => t.id === id) || THEMES[0];
 
+  /** Niveaux : profondeur du tirage dans le classement par liens entrants, et taille du vivier populaire. */
+  const DIFFICULTIES = [
+    { id: 'facile', name: 'Facile', icon: '🙂', desc: 'Les sujets les plus connus, indice gratuit', offset: 40, popular: 60 },
+    { id: 'normal', name: 'Normal', icon: '😎', desc: 'Sujets connus', offset: 250, popular: 200 },
+    { id: 'difficile', name: 'Difficile', icon: '🔥', desc: 'Sujets plus pointus', offset: 700, popular: 400 },
+  ];
+  const difficulty = (id) => DIFFICULTIES.find((d) => d.id === id) || DIFFICULTIES[1];
+
+  /** Descriptions Wikidata des rangs taxonomiques : familles, genres, ordres… imprenables en jeu. */
+  const TAXON_RANK = /^(famille|sous-famille|super-famille|genre|sous-genre|ordre|sous-ordre|infra-ordre|super-ordre|classe|sous-classe|infra-classe|tribu|sous-tribu|embranchement|sous-embranchement|clade|taxon|cohorte|règne|phylum|division|groupe d)/i;
+  /** Titres latins : « Canidae », « Panthera leo »… quand frwiki n'a pas de nom vernaculaire. */
+  const LATIN_SUFFIX = /(idae|inae|iformes|ptera|oidea|aceae|ales|phyta|mycota|ini|morpha|oidei|acea|ida)$/;
+  const LATIN_BINOMIAL = /^[A-Z][a-z]+ [a-z]+(us|a|um|is|e|ii|i|ae|ensis|or|ens|ans|es|os|on|ix|ax|eo|io|ea|ia|ula|ulus|ella|ina|inus|ata|atus|osa|osus|aris|alis|icus|ica|icum|ius|ium|ops|ter|era)$/;
+
+  /** Exclusions propres à un thème. */
+  function themeOk(th, e, diff = 'normal') {
+    const d = e.description || '';
+    if (/^(page d'homonymie|liste |catégorie|redirection)/i.test(d)) return false;
+    if (th.id === 'animaux') {
+      if (TAXON_RANK.test(d) || LATIN_SUFFIX.test(e.title)) return false;
+      if (diff === 'facile' && (LATIN_BINOMIAL.test(e.title) || !/espèce/i.test(d))) return false;
+    }
+    return true;
+  }
+  /** Préférence douce en mode facile : on prend d'abord ces entrées, puis les autres si besoin. */
+  function preferred(th, e, diff) {
+    if (diff !== 'facile') return true;
+    if (th.id === 'personnalites') return /fran[çc]ais/i.test(e.description || '');
+    if (th.id === 'animaux') return !/[A-Z][a-z]+ [a-z]+/.test(e.title);
+    return true;
+  }
+
   /** Titres à écarter du vivier populaire (pages de service, actualité brute, listes). */
   const BAD_TITLE = /^(Wikipédia|Spécial|Portail|Fichier|Aide|Catégorie|Modèle|Discussion|Utilisateur|Projet|Référence|Module|MediaWiki)\s*:|^Liste |^Listes |^Saison \d|^Championnat|^Coupe |^Ligue |^Tournoi|^Élection|^Sondage|^Classement|^Calendrier|^Décès en|^Mort[s]? en|^Chronologie|^Page principale|^Accueil|^\d{1,4}$|^\d{1,4} (en|av)|^Cookie \(informatique\)|^Résultats |^Qualification|^Phase |^Groupe [A-H]$|^Épisodes? |^Attentat|^Massacre|^Pornograph|^Sexe|^Sexualité|^Masturbation|^Pénis|^Vagin|^Fellation|^Sodomie|^Anus|^Orgasme|^Vulve|^Sein$|^Position sexuelle|^Rapport sexuel|^Prostitution|^Film pornographique|^Actrice pornographique|^Acteur pornographique/i;
   const CURRENT_EVENT = /\b(20[2-9]\d)\b/;
@@ -86,21 +118,25 @@ WJ.pool = (() => {
    * Fournit `count` articles jouables pour un thème et un besoin donné.
    * Pour le défi du jour, `seed` rend le tirage identique pour tout le monde.
    */
-  async function draw(themeId, { count = 10, need = { image: true }, seed = null, exclude = new Set() } = {}) {
+  async function draw(themeId, { count = 10, need = { image: true }, seed = null, exclude = new Set(), difficulty: diffId = 'normal' } = {}) {
     const th = theme(themeId);
+    const diff = difficulty(diffId);
     const random = seed ? rng(seed) : Math.random;
+    const usable = (list) => list.filter((e) => fits(e, need) && themeOk(th, e, diff.id)).length;
     let entries = [];
     if (th.id === 'populaire') {
-      entries = await popularEntries(viewsDay(), { strict: true, limit: 200 });
+      entries = (await popularEntries(viewsDay(), { strict: true, limit: Math.max(200, diff.popular) })).slice().sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, diff.popular);
     } else {
-      entries = await themedEntries(th, { random });
-      if (entries.filter((e) => fits(e, need)).length < count) {
-        entries = entries.concat(await themedEntries(th, { random, maxOffset: 100 }));
+      entries = await themedEntries(th, { random, maxOffset: diff.offset });
+      for (let i = 0; i < 2 && usable(entries) < count * 2; i++) {
+        entries = entries.concat(await themedEntries(th, { random, maxOffset: i === 0 ? diff.offset : Math.max(60, diff.offset * 2) }));
       }
     }
     const seen = new Set();
-    const ok = entries.filter((e) => fits(e, need) && !exclude.has(e.title) && !seen.has(e.title) && seen.add(e.title));
-    const picked = shuffle(ok, random).slice(0, count);
+    const ok = entries.filter((e) => fits(e, need) && themeOk(th, e, diff.id) && !exclude.has(e.title) && !seen.has(e.title) && seen.add(e.title));
+    const first = shuffle(ok.filter((e) => preferred(th, e, diff.id)), random);
+    const rest = shuffle(ok.filter((e) => !preferred(th, e, diff.id)), random);
+    const picked = first.concat(rest).slice(0, count);
     if (!picked.length) throw new Error('Aucun article jouable trouvé pour ce thème. Réessaie dans un instant.');
     return picked;
   }
@@ -109,5 +145,5 @@ WJ.pool = (() => {
   const dailySeed = (gameId) => `${gameId}:${dayKey(0)}`;
   const drawDaily = (gameId, opts = {}) => draw('populaire', { ...opts, seed: dailySeed(gameId) });
 
-  return { THEMES, theme, draw, drawDaily, dailySeed, popularTitles, popularEntries, themedEntries, toEntry, fits, imageOk, titleOk, viewsDay, BAD_IMAGE };
+  return { THEMES, theme, DIFFICULTIES, difficulty, themeOk, preferred, draw, drawDaily, dailySeed, popularTitles, popularEntries, themedEntries, toEntry, fits, imageOk, titleOk, viewsDay, BAD_IMAGE };
 })();

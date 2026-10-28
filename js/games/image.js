@@ -10,7 +10,9 @@
   const LIVES = 5;
   const HINT_COST = 15;
 
-  async function playRound({ entry, nextEntry, content }) {
+  async function playRound({ entry, nextEntry, content, difficulty = 'normal' }) {
+    const easy = difficulty === 'facile';
+    const hintCost = easy ? 0 : HINT_COST;
     if (nextEntry?.image) { const pre = new Image(); pre.src = nextEntry.image; }
     const title = WJ.answer.displayTitle(entry.title);
     const target = { title: entry.title, pageid: entry.pageid, aliases: [title] };
@@ -32,7 +34,7 @@
     const pass = WJ.ui.button('Je passe', () => finish(false, true), 'btn btn-ghost');
     const form = el('div', { class: 'guess' }, [acHost, validate, pass]);
     const result = el('div');
-    const points = () => Math.max(0, cap - errors * PENALTY - (hintUsed ? HINT_COST : 0));
+    const points = () => Math.max(0, cap - errors * PENALTY - (hintUsed ? hintCost : 0));
 
     function renderStatus() {
       ptsEl.innerHTML = `Jusqu’à <span class="pts">${points()}</span> pts`;
@@ -48,7 +50,7 @@
       modeLine.innerHTML = '';
       const btn = (id) => {
         const m = MODES[id];
-        const reachable = Math.max(0, Math.min(cap, m.max) - errors * PENALTY - (hintUsed ? HINT_COST : 0));
+        const reachable = Math.max(0, Math.min(cap, m.max) - errors * PENALTY - (hintUsed ? hintCost : 0));
         return el('button', { class: 'mode-btn', type: 'button', disabled: mode === id || (mode === 'lettres'), onclick: () => switchMode(id) }, [
           el('b', { text: (id === 'traits' ? '▁▁▁ ' : '▁A▁ ') + m.label }), el('small', { text: `jusqu’à ${reachable} pts · ${m.hint}` }),
         ]);
@@ -59,14 +61,20 @@
     }
     function hintButton() {
       const desc = entry.description && WJ.answer.hideTitleWords(entry.description, entry.title);
-      return el('button', { class: 'mode-btn', type: 'button', disabled: hintUsed || !desc, onclick: () => { hintUsed = true; hintHost.innerHTML = ''; hintHost.append(el('div', { class: 'hint-box', text: desc })); renderStatus(); renderModes(); } }, [
-        el('b', { text: '💡 Indice' }), el('small', { text: desc ? `−${HINT_COST} pts · la description Wikidata` : 'pas de description disponible' }),
+      return el('button', { class: 'mode-btn', type: 'button', disabled: hintUsed || !desc, onclick: showHint }, [
+        el('b', { text: '💡 Indice' }), el('small', { text: desc ? `−${hintCost} pts · la description Wikidata` : 'pas de description disponible' }),
       ]);
+    }
+    function showHint() {
+      const desc = entry.description && WJ.answer.hideTitleWords(entry.description, entry.title);
+      if (!desc || hintUsed) return;
+      hintUsed = true; hintHost.innerHTML = ''; hintHost.append(el('div', { class: 'hint-box', text: desc })); renderStatus(); renderModes();
     }
     function switchMode(id) {
       if (finished) return;
       mode = id;
       cap = Math.min(cap, MODES[id].max);
+      if (easy) [...title].forEach((c, i) => { if (/[\p{L}\p{N}]/u.test(c) && (i === 0 || title[i - 1] === ' ')) revealed.add(i); });
       if (id === 'lettres') WJ.answer.pickReveal(title, 0.35, random, revealed).forEach((i) => revealed.add(i));
       renderStatus(); renderMask(); renderModes();
       input.focus();
@@ -77,10 +85,11 @@
       const v = String(value || '').trim();
       if (!v) return input.focus();
       validate.disabled = true;
-      const verdict = await WJ.answer.check(v, target);
+      const verdict = await WJ.answer.check(v, target, { lenient: true });
       validate.disabled = false;
       if (verdict.ok) {
-        if (verdict.typo) WJ.ui.toast('Accepté malgré la coquille !', 'ok');
+        if (verdict.partial) WJ.ui.toast('Le nom suffit, on accepte !', 'ok');
+        else if (verdict.typo) WJ.ui.toast('Accepté malgré la coquille !', 'ok');
         else if (verdict.redirect) WJ.ui.toast(`« ${verdict.resolvedTitle} » mène bien au bon article !`, 'ok');
         return finish(true);
       }
@@ -120,6 +129,7 @@
     content.append(frame, el('div', { class: 'points-line' }, [ptsEl, heartsEl]), modeLine, maskHost, hintHost, form, result);
     WJ.ui.autocomplete(input, { onSubmit: submit });
     renderStatus(); renderModes();
+    if (easy) showHint();
     setTimeout(() => input.focus({ preventScroll: true }), 50);
     return done;
   }
@@ -132,7 +142,8 @@
       '<b>Les traits</b> : le nombre de lettres s’affiche, 60 pts max.',
       '<b>Lettres posées</b> : un tiers des lettres est dévoilé, 30 pts max.',
       `Chaque erreur coûte ${PENALTY} pts et une vie sur ${LIVES}, et dévoile une lettre de plus en mode traits ou lettres.`,
-      'Les redirections comptent : « Napoléon » vaut « Napoléon Ier ».',
+      'Les redirections comptent : « Napoléon » vaut « Napoléon Ier », et le nom de famille suffit pour une personne.',
+      'Mode facile : sujets les plus connus, description offerte, première lettre de chaque mot dévoilée avec les traits.',
     ],
     themes: true, need: { image: true }, rounds: 10, dailyRounds: 5, daily: true, playRound,
   });

@@ -46,6 +46,26 @@ module.exports = ({ page, url, check, live }) => {
       check(r.pool, 'filtres de titres');
       check(r.img, 'filtres d’images');
       check(r.excerpt === 'Première phrase ici. Deuxième phrase là.', 'excerpt: ' + r.excerpt);
+      const len = await ev(async () => ({
+        a1: (await WJ.answer.check('Tolstoï', { title: 'Léon Tolstoï', pageid: 1 }, { lenient: true, allowRedirect: false })),
+        a2: (await WJ.answer.check('dostoievski', { title: 'Fiodor Dostoïevski', pageid: 1 }, { lenient: true, allowRedirect: false })).ok,
+        a3: (await WJ.answer.check('monde', { title: 'Coupe du monde', pageid: 1 }, { lenient: true, allowRedirect: false })).ok,
+        a4: (await WJ.answer.check('Tolstoï', { title: 'Léon Tolstoï', pageid: 1 }, { lenient: false, allowRedirect: false })).ok,
+        a5: WJ.answer.nameAliases('Antoine de Saint-Exupéry'),
+        a6: (await WJ.answer.check('XIV', { title: 'Louis XIV', pageid: 1 }, { lenient: true, allowRedirect: false })).ok,
+        t1: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Canidae', description: 'famille de mammifères' }),
+        t2: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Lion', description: 'espèce de mammifères' }),
+        t3: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Panthera leo', description: 'espèce de mammifères' }, 'facile'),
+        t4: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Grand dauphin', description: 'espèce de mammifères' }, 'facile'),
+        t5: WJ.pool.themeOk(WJ.pool.theme('cinema'), { title: 'Titanic', description: 'page d\'homonymie' }),
+        p1: WJ.pool.preferred(WJ.pool.theme('personnalites'), { title: 'X', description: 'écrivain russe' }, 'facile'),
+        p2: WJ.pool.preferred(WJ.pool.theme('personnalites'), { title: 'X', description: 'écrivain français' }, 'facile'),
+      }));
+      check(len.a1.ok && len.a1.partial, 'nom de famille accepté en mode indulgent: ' + JSON.stringify(len.a1));
+      check(len.a2 && !len.a3 && !len.a4 && !len.a6, `aliases de nom ${JSON.stringify([len.a2, len.a3, len.a4, len.a6])}`);
+      check(len.a5.includes('Saint-Exupéry') && len.a5.includes('Exupéry'), 'alias nom composé: ' + len.a5);
+      check(!len.t1 && len.t2 && !len.t3 && len.t4 && !len.t5, `filtres animaux ${JSON.stringify([len.t1, len.t2, len.t3, len.t4, len.t5])}`);
+      check(!len.p1 && len.p2, 'préférence français en facile');
       if (!live) {
         const red = await ev(() => WJ.answer.check('Dickens', { title: 'Charles Dickens', pageid: 1355526 }));
         check(red.ok && red.redirect, 'redirection acceptée via l’API: ' + JSON.stringify(red));
@@ -315,6 +335,24 @@ module.exports = ({ page, url, check, live }) => {
         await page.waitForTimeout(60);
       }
       await wait('.end');
+    },
+    async image_facile() {
+      await goto('#/image');
+      await wait('.start');
+      check((await page.locator('.theme-chip:has-text("Facile")').count()) === 1, 'chip Facile présent');
+      await page.click('.theme-chip:has-text("Facile")');
+      await page.click('.start .btn-primary');
+      await wait('.image-frame img', 30000);
+      check((await page.locator('.hint-box').count()) === 1, 'description offerte en facile');
+      check((await text('.points-max')).includes('100'), 'toujours 100 pts en facile');
+      await page.click('.mode-btn:has-text("Les traits")');
+      await wait('.mask .cell');
+      const words = await ev(() => [...document.querySelectorAll('.mask-word')].map((w) => w.querySelector('.cell').classList.contains('shown')));
+      check(words.every(Boolean), 'première lettre de chaque mot dévoilée: ' + JSON.stringify(words));
+      await page.click('.theme-chip, .shell-title');
+      await goto('#/image');
+      await page.click('.theme-chip:has-text("Normal")');
+      check((await ev(() => WJ.store.settings().difficulty)) === 'normal', 'réglage mémorisé');
     },
     async secours_sans_metrics() {
       if (live) return;

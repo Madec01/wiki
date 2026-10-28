@@ -33,7 +33,7 @@ WJ.answer = (() => {
   }
 
   /** Tolérance aux fautes de frappe selon la longueur. */
-  const tolerance = (len) => (len >= 12 ? 2 : len >= 6 ? 1 : 0);
+  const tolerance = (len) => (len >= 14 ? 3 : len >= 8 ? 2 : len >= 5 ? 1 : 0);
 
   /** Comparaison locale : {ok, exact, typo}. */
   function compareLocal(guess, title, aliases = []) {
@@ -50,12 +50,30 @@ WJ.answer = (() => {
     return { ok: false };
   }
 
+  const PARTICLES = new Set(['de', 'du', 'des', 'le', 'la', 'les', 'von', 'van', 'der', 'den', 'da', 'del', 'della', 'di', 'do', 'dos', 'of', 'y', 'et', 'al', 'el', 'ibn', 'bin', 'ben', 'mac', 'mc', 'st', 'saint', 'sainte']);
+  /** Si le titre ressemble à un nom de personne (« Fiodor Dostoïevski »), formes acceptées : nom seul, titre sans le prénom. */
+  function nameAliases(title) {
+    const t = displayTitle(title);
+    const words = t.split(/\s+/);
+    if (words.length < 2 || words.length > 5) return [];
+    const nameLike = words.every((w) => /^[\p{Lu}]/u.test(w) || PARTICLES.has(w.toLowerCase()));
+    if (!nameLike) return [];
+    const last = words[words.length - 1];
+    if (normalize(last).replace(/ /g, '').length < 4 || /^[IVXLC]+$/.test(last) || /^\d/.test(last)) return [];
+    const out = [last, words.slice(1).join(' ')];
+    const lastPlain = last.split(/[-‐]/).pop();
+    if (lastPlain && lastPlain !== last && normalize(lastPlain).length >= 5) out.push(lastPlain);
+    return out;
+  }
+
   /**
    * Vérifie une réponse contre un article cible {title, pageid}. Essaie d'abord localement,
    * puis demande à Wikipédia si le texte saisi redirige vers la même page (ex. « Napoléon » → « Napoléon Ier »).
    */
-  async function check(guess, target, { allowRedirect = true } = {}) {
-    const local = compareLocal(guess, target.title, target.aliases || []);
+  async function check(guess, target, { allowRedirect = true, lenient = false } = {}) {
+    const aliases = (target.aliases || []).concat(lenient ? nameAliases(target.title) : []);
+    const local = compareLocal(guess, target.title, aliases);
+    if (local.ok && lenient && !compareLocal(guess, target.title, target.aliases || []).ok) local.partial = true;
     if (local.ok) return local;
     const g = String(guess || '').trim();
     if (!allowRedirect || g.length < 2 || !target.pageid) return { ok: false };
@@ -125,5 +143,5 @@ WJ.answer = (() => {
   }
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  return { normalize, stripArticles, levenshtein, compareLocal, check, displayTitle, mask, pickReveal, revealOneMore, letterIndexes, titleWords, hideTitleWords, escapeRe };
+  return { normalize, stripArticles, levenshtein, compareLocal, check, nameAliases, displayTitle, mask, pickReveal, revealOneMore, letterIndexes, titleWords, hideTitleWords, escapeRe };
 })();

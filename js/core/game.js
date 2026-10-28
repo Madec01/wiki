@@ -8,7 +8,7 @@ WJ.game = (id) => WJ.games.find((g) => g.id === id);
  * playRound(ctx) doit renvoyer {ok, points, title, label?, emoji?} quand la manche est finie (après le clic « Suivant »).
  * ctx = {index, total, score, content, shell, entry}
  */
-WJ.runRounds = async function runRounds({ game, root, variant = 'default', variantLabel, entries, playRound, daily = false, shareLine }) {
+WJ.runRounds = async function runRounds({ game, root, variant = 'default', variantLabel, entries, playRound, daily = false, shareLine, difficulty = 'normal' }) {
   let stopped = false;
   const total = entries.length;
   const shell = WJ.ui.shell(root, { title: game.name, icon: game.icon, rounds: total, onQuit: () => { stopped = true; location.hash = '#/'; } });
@@ -21,7 +21,7 @@ WJ.runRounds = async function runRounds({ game, root, variant = 'default', varia
     shell.content.innerHTML = '';
     let res;
     try {
-      res = await playRound({ index: i, total, score, content: shell.content, shell, entry: entries[i], nextEntry: entries[i + 1], results });
+      res = await playRound({ index: i, total, score, content: shell.content, shell, entry: entries[i], nextEntry: entries[i + 1], results, difficulty });
     } catch (e) {
       if (stopped) return;
       console.error(e);
@@ -49,7 +49,7 @@ WJ.runRounds = async function runRounds({ game, root, variant = 'default', varia
   const share = `WikiJeux · ${game.name}${daily ? ' · Défi du ' + new Date().toLocaleDateString('fr-FR') : variantLabel ? ' · ' + variantLabel : ''}\n${emojiLine} ${WJ.util.fmtInt(score)} pts${shareLine ? '\n' + shareLine(results) : ''}\n${location.href.split('#')[0]}#/${game.id}`;
   WJ.ui.view(root, WJ.ui.endScreen({
     game: game.name, variantLabel, results, total: score, isBest, best, daily, shareText: share,
-    onReplay: () => { location.hash = `#/${game.id}?theme=${encodeURIComponent(variant)}&go=1`; },
+    onReplay: () => { location.hash = `#/${game.id}?theme=${encodeURIComponent(variant.split(':')[0])}&difficulty=${difficulty}&go=1`; },
   }));
   return { score, results };
 };
@@ -64,12 +64,13 @@ WJ.standardGame = function standardGame(def) {
     start(root, params = {}) {
       const themes = def.themes === false ? null : (Array.isArray(def.themes) ? WJ.pool.THEMES.filter((t) => def.themes.includes(t.id)) : WJ.pool.THEMES.filter((t) => !def.need?.coords || t.geo || t.id === 'populaire'));
       const defaultTheme = params.theme && themes?.some((t) => t.id === params.theme) ? params.theme : (themes ? themes[0].id : 'default');
-      const launch = async ({ theme, daily }) => {
+      const launch = async ({ theme, daily, difficulty = 'normal' }) => {
         const rounds = daily ? (def.dailyRounds || 5) : (def.rounds || 10);
+        if (daily) difficulty = 'normal';
         WJ.ui.view(root, WJ.ui.loading());
         let entries;
         try {
-          entries = daily ? await WJ.pool.drawDaily(def.id, { count: rounds, need: def.need }) : await WJ.pool.draw(theme, { count: rounds, need: def.need });
+          entries = daily ? await WJ.pool.drawDaily(def.id, { count: rounds, need: def.need }) : await WJ.pool.draw(theme, { count: rounds, need: def.need, difficulty });
           if (def.prepare) entries = await def.prepare(entries, { theme, daily });
         } catch (e) {
           console.error(e);
@@ -77,10 +78,12 @@ WJ.standardGame = function standardGame(def) {
           return;
         }
         const th = WJ.pool.theme(theme);
-        await WJ.runRounds({ game, root, variant: themes ? theme : 'default', variantLabel: themes ? th.name : '', entries, playRound: def.playRound, daily, shareLine: def.shareLine });
+        const variant = (themes ? theme : 'default') + (difficulty !== 'normal' ? ':' + difficulty : '');
+        const label = (themes ? th.name : '') + (difficulty !== 'normal' ? ` (${difficulty})` : '');
+        await WJ.runRounds({ game, root, variant, variantLabel: label, entries, playRound: def.playRound, daily, shareLine: def.shareLine, difficulty });
       };
-      if (params.go) return launch({ theme: defaultTheme, daily: !!params.daily });
-      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme, rules: def.rules, daily: !!def.daily, onStart: launch, extra: def.extra ? def.extra() : null }));
+      if (params.go) return launch({ theme: defaultTheme, daily: !!params.daily, difficulty: params.difficulty || WJ.store.settings().difficulty || 'normal' });
+      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme, rules: def.rules, daily: !!def.daily, difficulty: def.difficulty !== false, onStart: launch, extra: def.extra ? def.extra() : null }));
     },
   };
   return WJ.register(game);

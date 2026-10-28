@@ -44,7 +44,7 @@
       if (finished) return;
       const v = String(value || '').trim(); if (!v) return;
       validate.disabled = true;
-      const verdict = await WJ.answer.check(v, target);
+      const verdict = await WJ.answer.check(v, target, { lenient: true });
       validate.disabled = false;
       if (verdict.ok) return finish(true);
       errors++; lives--; input.value = ''; input.focus(); refresh();
