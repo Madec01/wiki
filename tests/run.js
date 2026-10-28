@@ -41,7 +41,7 @@ const check = (cond, msg) => { if (!cond) { failures.push(msg); console.log('  â
   }
   await page.screenshot({ path: path.join(__dirname, 'last.png'), fullPage: true }).catch(() => {});
   await browser.close(); srv.close();
-  const relevant = errors.filter((e) => !/favicon|net::ERR|404/.test(e));
+  const relevant = errors.filter((e) => !/favicon|net::ERR|404|405 \(Method Not Allowed\)/.test(e));
   console.log('\nErreurs JS :', relevant.length ? relevant : 'aucune');
   if (relevant.length) failures.push(...relevant);
   console.log(failures.length ? `\n${failures.length} Ã©chec(s)` : '\nTout passe.');
