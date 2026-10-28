@@ -4,7 +4,7 @@
   const MAX_DUELS = 20;
   const game = {
     id: 'vues', name: 'Plus ou moins de vues', icon: '📈', group: 'comparer',
-    desc: 'Deux articles lus hier : lequel a reçu le plus de visites ? Enchaîne les bonnes réponses.',
+    desc: 'Deux articles très lus ces jours-ci : lequel a reçu le plus de visites ? Enchaîne les bonnes réponses.',
     start(root, params = {}) {
       const launch = async () => {
         WJ.ui.view(root, WJ.ui.loading('Chargement des pages les plus lues…'));

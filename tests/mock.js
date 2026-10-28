@@ -84,13 +84,13 @@ function sparqlMock(url) {
   return { results: { bindings: rows } };
 }
 
-async function install(page, { log = false } = {}) {
+async function install(page, { log = false, realParse = false } = {}) {
   await page.route(/wikimedia\.org|wikipedia\.org|wikidata\.org|unpkg\.com|tile\.openstreetmap\.org/, async (route) => {
     const url = new URL(route.request().url());
     if (log) console.log('[mock]', url.href.slice(0, 140));
     const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
     try {
-      if (url.hostname === 'upload.wikimedia.org' || url.hostname === 'tile.openstreetmap.org') return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
+      if (url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org' || url.hostname === 'tile.openstreetmap.org') return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
       if (url.hostname === 'wikimedia.org') return json(TOP);
       if (url.hostname === 'query.wikidata.org') return json(sparqlMock(url));
       if (url.hostname === 'commons.wikimedia.org') return json({ query: { pages: [{ imageinfo: [{ extmetadata: { Artist: { value: 'Test Artist' }, LicenseShortName: { value: 'CC BY-SA 4.0' } }, descriptionurl: 'https://commons.wikimedia.org/wiki/File:x.jpg' }] }] } });
@@ -99,6 +99,7 @@ async function install(page, { log = false } = {}) {
         const p = fakePage(title);
         return json({ title, pageid: p.pageid, extract: url.hostname.startsWith('fr.') ? EXTRACT(title) : `${title} ist ein sehr bekannter Artikel in einer anderen Sprache. Viele Leute kennen ihn aus dem Fernsehen, aus Büchern und aus der Schule, und er wird oft zitiert.`, description: p.description, thumbnail: p.thumbnail, originalimage: p.original, coordinates: { lat: 48.858, lon: 2.294 }, wikibase_item: p.pageprops.wikibase_item, type: 'standard' });
       }
+      if (url.pathname === '/w/api.php' && realParse && url.searchParams.get('action') === 'parse') return json(fx('parse-tour-eiffel.json'));
       if (url.pathname === '/w/api.php') return json(handleActionApi(url));
       if (url.hostname === 'unpkg.com') return route.fulfill({ status: 200, contentType: url.pathname.endsWith('.css') ? 'text/css' : 'application/javascript', body: url.pathname.endsWith('.css') ? '' : 'window.L={map(){return{setView(){return this},on(){},remove(){},fitBounds(){},invalidateSize(){}}},tileLayer(){return{addTo(){}}},marker(){return{addTo(){return this},bindPopup(){return this},openPopup(){return this}}},polyline(){return{addTo(){return this}}},latLngBounds(){return{}},icon(){return{}},divIcon(){return{}}};' });
       return route.fulfill({ status: 404, body: 'mock: ' + url.href });

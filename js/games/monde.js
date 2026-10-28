@@ -25,6 +25,7 @@
     );
     const map = L.map(mapEl, { worldCopyJump: true }).setView([30, 10], 2);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
+    setTimeout(() => { try { map.invalidateSize(); } catch (e) { /* ignore */ } }, 500);
     let guess = null, marker = null, finished = false;
     const place = (lat, lon) => {
       if (finished) return;
