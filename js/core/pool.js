@@ -20,7 +20,7 @@ WJ.pool = (() => {
 
   /** Niveaux : profondeur du tirage dans le classement par liens entrants, et taille du vivier populaire. */
   const DIFFICULTIES = [
-    { id: 'facile', name: 'Facile', icon: '🙂', desc: 'Les sujets les plus connus, indice gratuit', offset: 40, popular: 60 },
+    { id: 'facile', name: 'Facile', icon: '🙂', desc: 'Les sujets les plus connus, indice gratuit', offset: 120, popular: 100 },
     { id: 'normal', name: 'Normal', icon: '😎', desc: 'Sujets connus', offset: 250, popular: 200 },
     { id: 'difficile', name: 'Difficile', icon: '🔥', desc: 'Sujets plus pointus', offset: 700, popular: 400 },
   ];
@@ -135,9 +135,12 @@ WJ.pool = (() => {
     }
     const seen = new Set();
     const ok = entries.filter((e) => fits(e, need) && themeOk(th, e, diff.id) && !exclude.has(e.title) && !seen.has(e.title) && seen.add(e.title));
-    const first = shuffle(ok.filter((e) => preferred(th, e, diff.id)), random);
-    const rest = shuffle(ok.filter((e) => !preferred(th, e, diff.id)), random);
-    const picked = first.concat(rest).slice(0, count);
+    // Déjà joués récemment : on les garde pour la fin, pour varier les parties
+    const recent = seed ? new Set() : new Set(WJ.store.get('seen', []));
+    const rank = (e) => (preferred(th, e, diff.id) ? 0 : 2) + (recent.has(e.title) ? 1 : 0);
+    const groups = [0, 1, 2, 3].map((r) => shuffle(ok.filter((e) => rank(e) === r), random));
+    const picked = groups.flat().slice(0, count);
+    if (!seed && picked.length) WJ.store.set('seen', [...picked.map((e) => e.title), ...WJ.store.get('seen', []).filter((t) => !picked.some((e) => e.title === t))].slice(0, 400));
     if (!picked.length) throw new Error('Aucun article jouable trouvé pour ce thème. Réessaie dans un instant.');
     return picked;
   }

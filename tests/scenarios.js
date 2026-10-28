@@ -68,6 +68,7 @@ module.exports = ({ page, url, check, live }) => {
         t7: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Papillon', description: '' }),
         p1: WJ.pool.preferred(WJ.pool.theme('personnalites'), { title: 'X', description: 'écrivain russe' }, 'facile'),
         p2: WJ.pool.preferred(WJ.pool.theme('personnalites'), { title: 'X', description: 'écrivain français' }, 'facile'),
+        seen: await (async () => { WJ.store.set('seen', []); const a = await WJ.pool.draw('cinema', { count: 3, need: { image: true } }); const b = await WJ.pool.draw('cinema', { count: 3, need: { image: true } }); return { a: a.map((e) => e.title), b: b.map((e) => e.title), stored: WJ.store.get('seen', []).length }; })(),
         pairs: WJ.vieux.makePairs([{ born: 1800 }, { born: 1810 }, { born: 1900 }, { born: 1905 }, { born: 1500 }], 30).map((p) => Math.abs(p[0].born - p[1].born)),
         hp: WJ.habitants.makePairs([{ qid: 'a', pop: 100000 }, { qid: 'b', pop: 200000 }, { qid: 'c', pop: 5000000 }, { qid: 'd', pop: 110000 }, { qid: 'e', pop: 300000 }], 5).map((p) => [p.qid, p.ref.qid, Math.max(p.pop, p.ref.pop) / Math.min(p.pop, p.ref.pop)]),
       }));
@@ -76,6 +77,7 @@ module.exports = ({ page, url, check, live }) => {
       check(len.a5.includes('Saint-Exupéry') && len.a5.includes('Exupéry'), 'alias nom composé: ' + len.a5);
       check(!len.t1 && len.t2 && !len.t3 && len.t4 && !len.t5 && !len.t6 && !len.t7, `filtres animaux ${JSON.stringify([len.t1, len.t2, len.t3, len.t4, len.t5, len.t6, len.t7])}`);
       check(!len.p1 && len.p2, 'préférence français en facile');
+      check(len.seen.stored === 6 && len.seen.a.every((t) => !len.seen.b.includes(t)), 'deux tirages successifs sans répétition: ' + JSON.stringify(len.seen));
       check(len.pairs.length === 2 && len.pairs.every((g) => g > 0 && g <= 30), 'paires de même époque: ' + JSON.stringify(len.pairs));
       check(len.hp.length === 2 && len.hp.every(([x, r, k]) => x !== r && k >= 1.15 && k <= 4), 'paires de villes comparables: ' + JSON.stringify(len.hp));
       if (!live) {
@@ -164,26 +166,26 @@ module.exports = ({ page, url, check, live }) => {
       await wait('.redacted', 30000);
       check((await count('.redact')) > 5, 'mots masqués présents');
       check((await count('.redact.found')) >= 1, 'une partie des mots déjà visible en Normal');
+      check((await ev(() => [...document.querySelectorAll('.redact:not(.found)')].every((s) => s.dataset.len && Number(s.dataset.len) > 0))), 'nombre de lettres sur chaque bloc');
       const word = await ev(() => document.querySelector('.redact:not(.found):not(.title)').textContent);
-      await page.fill('.guess input', word);
-      await page.click('.guess .btn-primary');
+      await page.locator('.redact:not(.found):not(.title)').first().click();
+      await wait('.inline-guess');
+      await page.fill('.inline-guess', word);
+      await page.press('.inline-guess', 'Enter');
       await page.waitForTimeout(200);
       check((await text('.found-list')).includes(word), 'mot trouvé listé: ' + (await text('.found-list')));
-      check((await count('.redact.found')) >= 1, 'occurrences dévoilées');
       await page.click('.found-list span');
       check((await count('.redact.flash')) >= 1, 'surlignage au clic sur un mot trouvé');
-      await page.locator('.redact:not(.found)').first().click();
-      check((await count('.redact.selected')) === 1, 'mot sélectionné');
-      await page.click('button:has-text("Première lettre")');
-      check((await count('.redact.first')) >= 1, 'première lettre dévoilée');
-      await page.click('button:has-text("Dévoiler ce mot")');
-      check((await count('.redact.selected')) === 0 && (await count('.found-list span')) === 2, 'mot dévoilé entièrement');
-      await page.click('button:has-text("Un mot du texte")');
-      check((await count('.hints .theme-chip')) === 1, 'un mot offert sans sa place');
-      check((await text('.muted')).length > 0, 'statut affiché');
-      await answerCurrent(true);
+      // cinq ratés → premières lettres
+      for (let k = 0; k < 5; k++) { await page.locator('.redact:not(.found)').first().click(); await wait('.inline-guess'); await page.fill('.inline-guess', 'zzzz' + k); await page.press('.inline-guess', 'Enter'); await page.waitForTimeout(120); }
+      check((await count('.redact[data-first]')) >= 3, 'premières lettres après 5 ratés: ' + (await count('.redact[data-first]')));
+      // le titre tapé sur un bloc doré
+      await page.locator('.redact.title').first().click();
+      await wait('.inline-guess');
+      await page.fill('.inline-guess', await ev(() => WJ.debugEntry.title));
+      await page.press('.inline-guess', 'Enter');
       await wait('.reveal.ok');
-      check((await text('.reveal .pts')).includes('+75'), 'titre trouvé : 100 − 4 − 5 − 10 − 6 = 75 pts: ' + (await text('.reveal .pts')));
+      check((await text('.reveal .pts')).includes('+80'), 'titre trouvé après 5 ratés : 100 − 20 = 80 pts: ' + (await text('.reveal .pts')));
       check((await count('.redact.plain')) > 5 && (await count('.redact:not(.plain)')) === 0, 'texte en clair une fois trouvé');
       await page.click('.next');
       await autoplay();
@@ -331,6 +333,17 @@ module.exports = ({ page, url, check, live }) => {
       await goto('#/frise');
       await wait('.start');
       check((await count('.theme-chip:has-text("Marathon")')) === 1, 'modes de frise affichés');
+      await goto('#/frise?go=1&theme=personnalites&mode=classement');
+      await wait('.order-list .tl-card', 30000);
+      const n = await count('.order-list .tl-card');
+      check(n >= 5, `classement : ${n} cartes visibles`);
+      await page.locator('.order-arrows button:not([disabled])').first().click();
+      check((await count('.order-list .tl-card')) === n, 'déplacement sans perte de carte');
+      await page.click('button:has-text("Valider l’ordre")');
+      await wait('.reveal');
+      check(/\d+ juste/.test(await text('.reveal h3')), 'bilan justes / fausses: ' + (await text('.reveal h3')));
+      await page.click('.next');
+      await wait('.end');
     },
     async langue() {
       await goto('#/langue?go=1');

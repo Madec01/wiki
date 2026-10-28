@@ -6,6 +6,7 @@
     { id: 'classique', name: 'Classique', icon: '🕰️', cards: 10, lives: 3, desc: '10 cartes, 3 erreurs permises' },
     { id: 'marathon', name: 'Marathon', icon: '🏃', cards: 20, lives: 5, desc: '20 cartes, 5 erreurs permises' },
     { id: 'sansfilet', name: 'Sans filet', icon: '🪢', cards: 10, lives: 1, desc: '10 cartes, une seule erreur' },
+    { id: 'classement', name: 'Classement', icon: '🧩', cards: 8, lives: 0, order: true, desc: '8 cartes à ranger de la plus ancienne à la plus récente, puis on compte les justes' },
   ];
   const PTS = 10;
   const KIND_LABEL = { naissance: '👤 naissance', sortie: '🎬 sortie', creation: '🏛️ création', debut: '📅 début', evenement: '📅 événement' };
@@ -42,11 +43,11 @@
           const dates = await keyDates(entries.map((e) => e.qid));
           const cards = shuffle(entries.filter((e) => dates[e.qid]).map((e) => ({ ...e, ...dates[e.qid] }))).slice(0, mode.cards);
           if (cards.length < 5) throw new Error('Pas assez de dates trouvées pour ce thème, réessaie.');
-          play(root, cards, theme, mode, difficulty);
+          if (mode.order) playOrder(root, cards, theme, mode, difficulty); else play(root, cards, theme, mode, difficulty);
         } catch (e) { WJ.ui.view(root, WJ.ui.errorBox(e, () => launch({ theme, mode: modeId, difficulty }))); }
       };
       if (params.go) return launch({ theme: params.theme || 'populaire', mode: params.mode || 'classique', difficulty: params.difficulty || WJ.store.settings().difficulty || 'normal' });
-      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme: params.theme || 'populaire', modes: MODES, defaultMode: params.mode || 'classique', difficulty: true, rules: [`${PTS} pts par carte bien placée, +20 si tout est juste.`, 'Une carte mal placée est déplacée au bon endroit et la frise continue.', 'Les dates viennent de Wikidata : naissance, sortie, construction ou date de l’événement.'], onStart: launch }));
+      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme: params.theme || 'populaire', modes: MODES, defaultMode: params.mode || 'classique', difficulty: true, rules: [`${PTS} pts par carte bien placée, +20 si tout est juste.`, 'Une carte mal placée est déplacée au bon endroit et la frise continue.', 'Mode Classement : toutes les cartes sont visibles, range-les puis valide ; on compte les justes et les fausses.', 'Les dates viennent de Wikidata : naissance, sortie, construction ou date de l’événement.'], onStart: launch }));
     },
   };
 
@@ -107,6 +108,60 @@
     }
     render();
   }
+  /** Mode Classement : toutes les cartes sont visibles, on les range avec les flèches puis on valide. */
+  function playOrder(root, cards, theme, mode, difficulty) {
+    const shell = WJ.ui.shell(root, { title: game.name, icon: game.icon, rounds: 0 });
+    const order = cards.slice();
+    let finished = false;
+    const list = el('div', { class: 'order-list' });
+    const result = el('div');
+    const validate = WJ.ui.button('Valider l’ordre', () => check(), 'btn btn-primary btn-lg');
+    shell.content.append(el('p', { class: 'muted', style: { textAlign: 'center' }, text: 'Range les cartes de la plus ancienne (1) à la plus récente avec les flèches, puis valide.' }), list, el('div', { class: 'row center' }, [validate]), result);
+    const move = (i, d) => { const j = i + d; if (j < 0 || j >= order.length) return; [order[i], order[j]] = [order[j], order[i]]; render(); };
+    function render(verdict = null) {
+      list.innerHTML = '';
+      order.forEach((c, i) => {
+        const v = verdict ? verdict[i] : null;
+        const card = el('div', { class: 'tl-card' + (v === null ? '' : v ? ' placed-ok' : ' placed-ko') }, [
+          el('span', { class: 'pos', text: String(i + 1) }),
+          WJ.ui.image(c.image, '', ''), el('div', { text: c.title, style: { fontWeight: 600 } }),
+          el('div', { class: 'muted', style: { fontSize: '.68rem' }, text: KIND_LABEL[c.kind] || '' }),
+          el('div', { class: 'year', text: verdict ? fmtYear(c.year) : '?' }),
+          verdict ? null : el('div', { class: 'order-arrows' }, [
+            el('button', { type: 'button', text: '◀', 'aria-label': 'Vers la gauche', disabled: i === 0, onclick: () => move(i, -1) }),
+            el('button', { type: 'button', text: '▶', 'aria-label': 'Vers la droite', disabled: i === order.length - 1, onclick: () => move(i, 1) }),
+          ]),
+        ]);
+        list.append(card);
+      });
+    }
+    function check() {
+      if (finished) return; finished = true;
+      validate.remove();
+      const sorted = order.slice().sort((a, b) => a.year - b.year);
+      const verdict = order.map((c, i) => c.year === sorted[i].year);
+      const exact = verdict.filter(Boolean).length;
+      let score = exact * PTS + (exact === order.length ? 20 : 0);
+      render(verdict);
+      shell.setScore(score);
+      const results = order.map((c, i) => ({ ok: verdict[i], points: verdict[i] ? PTS : 0, title: c.title, label: `${i + 1}. ${c.title} (${fmtYear(c.year)})` }));
+      result.append(el('div', { class: 'reveal ' + (exact === order.length ? 'ok' : exact ? '' : 'ko') }, [
+        el('h3', { text: `${exact} juste${exact > 1 ? 's' : ''}, ${order.length - exact} fau${order.length - exact > 1 ? 'sses' : 'sse'}` }),
+        el('p', { class: 'muted', text: 'Bon ordre : ' + sorted.map((c) => `${c.title} (${fmtYear(c.year)})`).join(' → ') }),
+        el('p', { class: 'pts', text: `+${score} pts` }),
+      ]));
+      WJ.ui.waitNext(result, 'Voir le résultat').then(() => {
+        WJ.store.bumpStat('games', 1); WJ.store.bumpStat('points', score);
+        const variant = [theme, mode.id, difficulty !== 'normal' ? difficulty : null].filter(Boolean).join(':');
+        const best = WJ.store.best(game.id, variant)?.score ?? null;
+        const isBest = WJ.store.recordScore(game.id, variant, score);
+        WJ.ui.view(root, WJ.ui.endScreen({ game: game.name, variantLabel: `${WJ.pool.theme(theme).name}, ${mode.name}`, results, total: score, isBest, best, shareText: `WikiJeux · ${game.name} · ${mode.name}\n${results.map((r) => (r.ok ? '🟩' : '🟥')).join('')} ${exact}/${order.length} justes, ${score} pts\n${location.href.split('#')[0]}#/frise`, onReplay: () => { location.hash = `#/frise?theme=${theme}&mode=${mode.id}&difficulty=${difficulty}&go=1&r=${Date.now()}`; } }));
+      });
+    }
+    render();
+    WJ.debugOrder = { order, move };
+  }
+
   WJ.register(game);
   WJ.frise = { keyDates };
 })();
