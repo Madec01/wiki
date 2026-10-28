@@ -176,9 +176,13 @@ module.exports = ({ page, url, check, live }) => {
       check((await text('.found-list')).includes(word), 'mot trouvé listé: ' + (await text('.found-list')));
       await page.click('.found-list span');
       check((await count('.redact.flash')) >= 1, 'surlignage au clic sur un mot trouvé');
-      // cinq ratés → premières lettres
-      for (let k = 0; k < 5; k++) { await page.locator('.redact:not(.found)').first().click(); await wait('.inline-guess'); await page.fill('.inline-guess', 'zzzz' + k); await page.press('.inline-guess', 'Enter'); await page.waitForTimeout(120); }
-      check((await count('.redact[data-first]')) >= 3, 'premières lettres après 5 ratés: ' + (await count('.redact[data-first]')));
+      // trois ratés → premières lettres ; les paliers suivants complètent les mots
+      for (let k = 0; k < 3; k++) { await page.locator('.redact:not(.found)').first().click(); await wait('.inline-guess'); await page.fill('.inline-guess', 'zzzz' + k); await page.press('.inline-guess', 'Enter'); await page.waitForTimeout(120); }
+      check((await count('.redact[data-hint]')) >= 3, 'premières lettres après 3 ratés: ' + (await count('.redact[data-hint]')));
+      await ev(() => { WJ.debugCaviarde.hintStep(); WJ.debugCaviarde.hintStep(); });
+      const maxHint = await ev(() => Math.max(0, ...[...document.querySelectorAll('.redact[data-hint]')].map((s) => s.dataset.hint.length)));
+      check(maxHint >= 2, 'les mots entamés se remplissent (indice de ' + maxHint + ' lettres)');
+      for (let k = 0; k < 2; k++) { await page.locator('.redact:not(.found)').first().click(); await wait('.inline-guess'); await page.fill('.inline-guess', 'yyyy' + k); await page.press('.inline-guess', 'Enter'); await page.waitForTimeout(120); }
       // le titre tapé sur un bloc doré
       await page.locator('.redact.title').first().click();
       await wait('.inline-guess');

@@ -2,8 +2,8 @@
 (() => {
   const { el, shuffle, rng } = WJ.util;
   const ROUNDS = 5;
-  const MISS_STEP = 5;        // tous les 5 essais ratés, des premières lettres apparaissent
-  const STEP_SHARE = 0.2;     // part des mots encore masqués qui reçoivent leur première lettre à chaque palier
+  const MISS_STEP = 3;        // tous les 3 essais ratés, des lettres apparaissent
+  const STEP_SHARE = 0.25;    // part des mots encore masqués concernés à chaque palier
   const PREREVEAL = { facile: 0.4, normal: 0.15, difficile: 0 }; // part des mots (hors titre) déjà visibles au départ
 
   async function playRound({ entry, content, difficulty = 'normal' }) {
@@ -36,7 +36,7 @@
     const refresh = () => {
       const h = hidden().length;
       const left = MISS_STEP - (misses % MISS_STEP);
-      status.textContent = `${attempts} essai${attempts > 1 ? 's' : ''}, ${misses} raté${misses > 1 ? 's' : ''} · ${h} mot${h > 1 ? 's' : ''} masqué${h > 1 ? 's' : ''} · ${points()} pts si tu trouves maintenant · premières lettres dans ${left} raté${left > 1 ? 's' : ''}`;
+      status.textContent = `${attempts} essai${attempts > 1 ? 's' : ''}, ${misses} raté${misses > 1 ? 's' : ''} · ${h} mot${h > 1 ? 's' : ''} masqué${h > 1 ? 's' : ''} · ${points()} pts si tu trouves maintenant · lettres offertes dans ${left} raté${left > 1 ? 's' : ''}`;
     };
 
     // --- surlignage des mots trouvés
@@ -50,7 +50,7 @@
     }
     function reveal(norm, { chip = true } = {}) {
       let hits = 0;
-      spans.forEach((s) => { if (!s.classList.contains('found') && WJ.text.sameWord(s.dataset.norm, norm)) { s.classList.add('found'); delete s.dataset.first; hits++; } });
+      spans.forEach((s) => { if (!s.classList.contains('found') && WJ.text.sameWord(s.dataset.norm, norm)) { s.classList.add('found'); delete s.dataset.hint; hits++; } });
       if (hits && chip) {
         const label = spans.find((s) => WJ.text.sameWord(s.dataset.norm, norm))?.textContent || norm;
         const c = el('span', { text: `${label} ×${hits}`, dataset: { norm } });
@@ -61,13 +61,25 @@
     }
     const titleDone = () => titleNorms.size && spans.filter((s) => s.classList.contains('title')).every((s) => s.classList.contains('found'));
 
-    /** Palier d'indices : une part des mots masqués reçoit sa première lettre (sans remise à zéro du compteur). */
+    /** Palier d'indices : une part des mots masqués gagne une lettre de plus (les mots déjà entamés continuent de se remplir). */
     function hintStep() {
       steps++;
-      const cands = [...new Set(hidden().filter((s) => !s.dataset.first).map((s) => s.dataset.norm))];
-      const n = Math.max(3, Math.ceil(cands.length * STEP_SHARE));
-      shuffle(cands, random).slice(0, n).forEach((norm) => spans.forEach((s) => { if (s.dataset.norm === norm && !s.classList.contains('found')) s.dataset.first = [...s.textContent][0]; }));
-      WJ.ui.toast('Des premières lettres apparaissent.', 'info', 1600);
+      const byNorm = new Map();
+      hidden().forEach((s) => { if (!byNorm.has(s.dataset.norm)) byNorm.set(s.dataset.norm, s); });
+      const started = shuffle([...byNorm.keys()].filter((n) => byNorm.get(n).dataset.hint), random);
+      const fresh = shuffle([...byNorm.keys()].filter((n) => !byNorm.get(n).dataset.hint), random);
+      const n = Math.max(3, Math.ceil(byNorm.size * STEP_SHARE));
+      const picks = started.slice(0, Math.ceil(n / 2));
+      picks.push(...fresh.slice(0, n - picks.length));
+      if (picks.length < n) picks.push(...started.slice(Math.ceil(n / 2), Math.ceil(n / 2) + n - picks.length));
+      for (const norm of picks) {
+        const sample = byNorm.get(norm);
+        const letters = [...sample.textContent];
+        const len = (sample.dataset.hint ? [...sample.dataset.hint].length : 0) + 1;
+        if (len >= letters.length) { reveal(norm, { chip: false }); continue; } // mot entièrement donné
+        spans.forEach((s) => { if (s.dataset.norm === norm && !s.classList.contains('found')) s.dataset.hint = [...s.textContent].slice(0, len).join(''); });
+      }
+      WJ.ui.toast(steps === 1 ? 'Des premières lettres apparaissent.' : 'Les mots se remplissent un peu plus.', 'info', 1600);
     }
 
     // --- clic sur un mot : saisie en place
@@ -122,7 +134,7 @@
       if (finished) return; finished = true;
       closeEditor();
       const pts = ok ? points() : 0;
-      spans.forEach((s) => { s.classList.add('found', 'plain'); s.classList.remove('flash'); delete s.dataset.first; });
+      spans.forEach((s) => { s.classList.add('found', 'plain'); s.classList.remove('flash'); delete s.dataset.hint; });
       actions.remove(); status.remove();
       article.before(el('p', { class: 'muted', text: ok ? 'Bravo, voici le résumé en clair :' : 'Voici le résumé en clair :' }));
       result.append(el('div', { class: 'reveal ' + (ok ? 'ok' : 'ko') }, [
@@ -148,7 +160,7 @@
   WJ.standardGame({
     id: 'caviarde', name: 'Résumé caviardé', icon: '🕶️', group: 'deviner',
     desc: 'Le résumé d’un article est masqué mot par mot. Clique sur un mot, propose ce qu’il cache, et retrouve le titre.',
-    rules: ['Chaque bloc affiche son nombre de lettres. Un mot trouvé se dévoile partout où il apparaît, même si tu l’as proposé au mauvais endroit.', `Tous les ${MISS_STEP} essais ratés, une partie des mots masqués dévoile sa première lettre.`, 'Les mots-outils sont visibles, plus 15 % des mots en Normal et 40 % en Facile.', '100 pts moins 4 par essai raté, minimum 10. Clique sur un mot trouvé pour le surligner partout.', `${ROUNDS} articles par partie.`],
+    rules: ['Chaque bloc affiche son nombre de lettres. Un mot trouvé se dévoile partout où il apparaît, même si tu l’as proposé au mauvais endroit.', `Tous les ${MISS_STEP} essais ratés, un quart des mots masqués gagne une lettre : les mots entamés continuent de se remplir.`, 'Les mots-outils sont visibles, plus 15 % des mots en Normal et 40 % en Facile.', '100 pts moins 4 par essai raté, minimum 10. Clique sur un mot trouvé pour le surligner partout.', `${ROUNDS} articles par partie.`],
     themes: true, need: {}, rounds: ROUNDS, playRound,
   });
 })();

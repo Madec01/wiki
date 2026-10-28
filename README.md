@@ -10,7 +10,7 @@ Treize jeux en français construits sur Wikipédia, Wikimedia Commons et Wikidat
 | Jeu | Principe |
 | --- | --- |
 | 🖼️ **Devine l’image** | L’image principale d’un article s’affiche. Trois façons de répondre : *cash* (100 pts), *les traits* qui montrent le nombre de lettres (60 pts), *lettres posées* avec un tiers des lettres dévoilées (30 pts). Chaque erreur coûte 10 pts et une vie, façon pendu. Défi du jour partagé par tous les joueurs. |
-| 🕶️ **Résumé caviardé** | Le résumé est masqué mot par mot, chaque bloc affiche son nombre de lettres. Clique sur un bloc et tape ce qu’il cache : un mot trouvé se dévoile partout. Tous les 5 essais ratés, une partie des mots dévoile sa première lettre. Le texte s’affiche en clair à la fin. |
+| 🕶️ **Résumé caviardé** | Le résumé est masqué mot par mot, chaque bloc affiche son nombre de lettres. Clique sur un bloc et tape ce qu’il cache : un mot trouvé se dévoile partout. Tous les 3 essais ratés, un quart des mots masqués gagne une lettre, les mots entamés continuant de se remplir. Le texte s’affiche en clair à la fin. |
 | 🗂️ **Les catégories** | Cinq catégories d’un article, puis une de plus par erreur. Indices : traits du titre, image, description. |
 | 🔀 **Anagramme** | Les lettres du titre sont mélangées mot par mot. Indices payants : image, description, premières lettres. |
 | ✍️ **Texte à trous** | Le début de l’article avec trois mots clés effacés, à choisir parmi quatre propositions (saisie libre en Difficile). |
