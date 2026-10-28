@@ -151,8 +151,10 @@ main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 1rem 16p
 .redact.found { background: var(--ok-soft); color: var(--ink); animation: pop .3s; }
 .redact.flash { background: var(--accent); color: var(--accent-ink); }
 .redact.selected { outline: 3px solid var(--accent); outline-offset: 1px; }
-.redact.first { color: var(--bg); }
+.redact.first { color: var(--ink); }
 .redact.first::first-letter { color: var(--accent); font-weight: 700; }
+.redact.title.first { color: var(--accent); }
+.redact.title.first::first-letter { color: var(--accent-ink); }
 .found-list span { cursor: pointer; }
 .found-list span.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .hints { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; }
