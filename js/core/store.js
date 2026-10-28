@@ -43,7 +43,7 @@ WJ.store = (() => {
   const best = (game, variant) => get(bestKey(game, variant), null);
   function recordScore(game, variant, score, extra = {}) {
     const prev = best(game, variant);
-    const isBest = prev === null || score > prev.score;
+    const isBest = score > 0 && (prev === null || score > prev.score);
     if (isBest) set(bestKey(game, variant), { score, date: new Date().toISOString(), ...extra });
     const hist = get('history', []);
     hist.unshift({ game, variant, score, date: new Date().toISOString(), ...extra });
