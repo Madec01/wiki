@@ -1,8 +1,13 @@
 /* Frise chronologique : place chaque carte au bon endroit dans la frise. */
 (() => {
   const { el, shuffle, fmtYear, yearFromWikidata } = WJ.util;
-  const LIVES = 3, PTS = 10, CARDS = 10;
   const THEMES = ['populaire', 'personnalites', 'cinema', 'monuments', 'jeux', 'peinture'];
+  const MODES = [
+    { id: 'classique', name: 'Classique', icon: '🕰️', cards: 10, lives: 3, desc: '10 cartes, 3 erreurs permises' },
+    { id: 'marathon', name: 'Marathon', icon: '🏃', cards: 20, lives: 5, desc: '20 cartes, 5 erreurs permises' },
+    { id: 'sansfilet', name: 'Sans filet', icon: '🪢', cards: 10, lives: 1, desc: '10 cartes, une seule erreur' },
+  ];
+  const PTS = 10;
   const KIND_LABEL = { naissance: '👤 naissance', sortie: '🎬 sortie', creation: '🏛️ création', debut: '📅 début', evenement: '📅 événement' };
   const KIND_PRIORITY = ['naissance', 'sortie', 'creation', 'debut', 'evenement'];
 
@@ -29,31 +34,33 @@
     desc: 'Des personnages, des films, des monuments : place chaque carte au bon endroit dans le temps.',
     start(root, params = {}) {
       const themes = WJ.pool.THEMES.filter((t) => THEMES.includes(t.id));
-      const launch = async ({ theme }) => {
+      const launch = async ({ theme, mode: modeId, difficulty = 'normal' }) => {
+        const mode = MODES.find((m) => m.id === modeId) || MODES[0];
         WJ.ui.view(root, WJ.ui.loading('Recherche de dates sur Wikidata…'));
         try {
-          const entries = await WJ.pool.draw(theme, { count: 16, need: { image: true, qid: true } });
+          const entries = await WJ.pool.draw(theme, { count: mode.cards + 8, need: { image: true, qid: true }, difficulty });
           const dates = await keyDates(entries.map((e) => e.qid));
-          const cards = shuffle(entries.filter((e) => dates[e.qid]).map((e) => ({ ...e, ...dates[e.qid] }))).slice(0, CARDS);
+          const cards = shuffle(entries.filter((e) => dates[e.qid]).map((e) => ({ ...e, ...dates[e.qid] }))).slice(0, mode.cards);
           if (cards.length < 5) throw new Error('Pas assez de dates trouvées pour ce thème, réessaie.');
-          play(root, cards, theme);
-        } catch (e) { WJ.ui.view(root, WJ.ui.errorBox(e, () => launch({ theme }))); }
+          play(root, cards, theme, mode, difficulty);
+        } catch (e) { WJ.ui.view(root, WJ.ui.errorBox(e, () => launch({ theme, mode: modeId, difficulty }))); }
       };
-      if (params.go) return launch({ theme: params.theme || 'populaire' });
-      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme: params.theme || 'populaire', rules: [`${PTS} pts par carte bien placée, ${LIVES} erreurs autorisées.`, 'Une carte mal placée est déplacée au bon endroit et la frise continue.', 'Les dates viennent de Wikidata : naissance, sortie, construction ou date de l’événement.'], onStart: launch }));
+      if (params.go) return launch({ theme: params.theme || 'populaire', mode: params.mode || 'classique', difficulty: params.difficulty || WJ.store.settings().difficulty || 'normal' });
+      WJ.ui.view(root, WJ.ui.startScreen({ game, themes, defaultTheme: params.theme || 'populaire', modes: MODES, defaultMode: params.mode || 'classique', difficulty: true, rules: [`${PTS} pts par carte bien placée, +20 si tout est juste.`, 'Une carte mal placée est déplacée au bon endroit et la frise continue.', 'Les dates viennent de Wikidata : naissance, sortie, construction ou date de l’événement.'], onStart: launch }));
     },
   };
 
-  function play(root, cards, theme) {
+  function play(root, cards, theme, mode, difficulty) {
     const shell = WJ.ui.shell(root, { title: game.name, icon: game.icon, rounds: cards.length - 1 });
     const placed = [cards[0]];
     const queue = cards.slice(1);
-    let lives = LIVES, score = 0, correct = 0, finished = false;
+    let lives = mode.lives, score = 0, correct = 0, finished = false;
     const results = [];
     const timeline = el('div', { class: 'timeline' });
+    const ends = el('div', { class: 'tl-ends' });
     const current = el('div', { class: 'tl-current' });
     const lifeLine = el('div', { class: 'row center' });
-    shell.content.append(el('p', { class: 'muted', style: { textAlign: 'center' }, text: 'Clique sur un « + » pour placer la carte dans la frise, du plus ancien au plus récent.' }), lifeLine, current, timeline);
+    shell.content.append(el('p', { class: 'muted', style: { textAlign: 'center' }, text: 'Où placer cette carte ? Clique sur un « + » : à gauche le plus ancien, à droite le plus récent.' }), lifeLine, current, timeline, el('div', { class: 'tl-axis' }), ends);
 
     const cardEl = (c, { showYear = true, cls = '' } = {}) => el('div', { class: 'tl-card ' + cls }, [
       WJ.ui.image(c.image, '', ''), el('div', { text: c.title, style: { fontWeight: 600 } }),
@@ -61,9 +68,10 @@
       el('div', { class: 'year', text: showYear ? fmtYear(c.year) : '?' }),
     ]);
     function render() {
-      lifeLine.innerHTML = ''; lifeLine.append(WJ.ui.hearts(lives, LIVES));
-      shell.setScore(score); shell.setRound(correct + (results.length - correct) + 1, cards.length - 1);
+      lifeLine.innerHTML = ''; lifeLine.append(WJ.ui.hearts(lives, mode.lives));
+      shell.setScore(score); shell.setRound(Math.min(results.length + 1, cards.length - 1), cards.length - 1);
       current.innerHTML = ''; timeline.innerHTML = '';
+      ends.innerHTML = ''; ends.append(el('span', { text: '⟵ plus ancien · ' + fmtYear(placed[0].year) }), el('span', { text: fmtYear(placed[placed.length - 1].year) + ' · plus récent ⟶' }));
       const card = queue[0];
       if (!card || lives <= 0) return finish();
       current.append(cardEl(card, { showYear: false }));
@@ -92,9 +100,10 @@
       if (finished) return; finished = true;
       if (correct === cards.length - 1) score += 20;
       WJ.store.bumpStat('games', 1); WJ.store.bumpStat('points', score);
-      const best = WJ.store.best(game.id, theme)?.score ?? null;
-      const isBest = WJ.store.recordScore(game.id, theme, score);
-      WJ.ui.view(root, WJ.ui.endScreen({ game: game.name, variantLabel: WJ.pool.theme(theme).name, results, total: score, isBest, best, shareText: `WikiJeux · ${game.name}\n${results.map((r) => (r.ok ? '🟩' : '🟥')).join('')} ${score} pts\n${location.href.split('#')[0]}#/frise`, onReplay: () => { location.hash = `#/frise?theme=${theme}&go=1&r=${Date.now()}`; } }));
+      const variant = [theme, mode.id, difficulty !== 'normal' ? difficulty : null].filter(Boolean).join(':');
+      const best = WJ.store.best(game.id, variant)?.score ?? null;
+      const isBest = WJ.store.recordScore(game.id, variant, score);
+      WJ.ui.view(root, WJ.ui.endScreen({ game: game.name, variantLabel: `${WJ.pool.theme(theme).name}, ${mode.name}`, results, total: score, isBest, best, shareText: `WikiJeux · ${game.name} · ${mode.name}\n${results.map((r) => (r.ok ? '🟩' : '🟥')).join('')} ${score} pts\n${location.href.split('#')[0]}#/frise`, onReplay: () => { location.hash = `#/frise?theme=${theme}&mode=${mode.id}&difficulty=${difficulty}&go=1&r=${Date.now()}`; } }));
     }
     render();
   }

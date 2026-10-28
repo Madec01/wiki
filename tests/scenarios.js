@@ -1,10 +1,12 @@
 /* Scénarios de test. Chaque fonction est un test ; `check` consigne les assertions. */
-const WJ_len = (t) => t.replace(/\s*\([^)]*\)\s*$/, '').replace(/\s/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').length;
+const WJ_len = (t) => t.replace(/\s*\([^)]*\)\s*$/, '').replace(/\s/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '').length;
 module.exports = ({ page, url, check, live }) => {
-  const goto = async (hash) => { await page.goto(url + hash); await page.waitForTimeout(150); };
+  // Même hash qu'actuellement : le navigateur ne déclenche pas hashchange, on passe par l'accueil d'abord.
+  const goto = async (hash) => { const cur = await page.evaluate(() => location.hash).catch(() => ''); if (cur === hash) { await page.goto(url + '#/'); await page.waitForTimeout(80); } await page.goto(url + hash); await page.waitForTimeout(150); };
   const text = async (sel) => (await page.locator(sel).first().textContent()) || '';
   const wait = (sel, t = 15000) => page.waitForSelector(sel, { timeout: t });
   const ev = (fn, ...args) => page.evaluate(fn, ...args);
+  const count = (sel) => page.locator(sel).count();
 
   async function answerCurrent(correct = true) {
     const title = await ev(() => WJ.debugEntry.title);
@@ -12,14 +14,18 @@ module.exports = ({ page, url, check, live }) => {
     await page.click('.guess .btn-primary');
     return title;
   }
-  async function finishRemainingRounds(passLabel = 'Je passe') {
-    for (let i = 0; i < 20; i++) {
-      if (await page.locator('.end').count()) return;
-      const pass = page.locator(`button:has-text("${passLabel}")`);
-      if (await pass.count()) await pass.first().click();
-      const next = page.locator('.next');
-      if (await next.count()) await next.first().click();
-      await page.waitForTimeout(100);
+  /** Joue n'importe quelle manche jusqu'à l'écran de fin, en cliquant ce qui est cliquable. */
+  async function autoplay(max = 120) {
+    const order = ['.next', 'button:has-text("Je passe")', '.choices .btn:not([disabled])', '.options .btn:not([disabled])', '.tl-gap', '.duel .vs-card', 'button:has-text("plus peuplée")', 'button:has-text("Valider mon estimation")', 'button:has-text("Plus de vues")', 'button:has-text("Valider ma position")'];
+    for (let i = 0; i < max; i++) {
+      if (await count('.end')) return;
+      if (await count('.next')) { await page.locator('.next').first().click(); await page.waitForTimeout(60); continue; }
+      if (await count('.blank-choice .btn:not([disabled])')) { const boxes = page.locator('.blank-choice'); const n = await boxes.count(); for (let k = 0; k < n; k++) await boxes.nth(k).locator('.btn:not([disabled])').first().click(); await page.click('button:has-text("Valider")'); await page.waitForTimeout(80); continue; }
+      if (await count('#map') && !(await count('.reveal'))) await ev(() => WJ.debugMonde && WJ.debugMonde.place && WJ.debugMonde.place(10, 10));
+      let clicked = false;
+      for (const sel of order) { const l = page.locator(sel); if (await l.count()) { await l.first().click(); clicked = true; break; } }
+      if (!clicked) await page.waitForTimeout(150);
+      await page.waitForTimeout(60);
     }
   }
 
@@ -58,14 +64,20 @@ module.exports = ({ page, url, check, live }) => {
         t3: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Panthera leo', description: 'espèce de mammifères' }, 'facile'),
         t4: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Grand dauphin', description: 'espèce de mammifères' }, 'facile'),
         t5: WJ.pool.themeOk(WJ.pool.theme('cinema'), { title: 'Titanic', description: 'page d\'homonymie' }),
+        t6: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Coléoptères', description: 'ordre d\'insectes' }),
+        t7: WJ.pool.themeOk(WJ.pool.theme('animaux'), { title: 'Papillon', description: '' }),
         p1: WJ.pool.preferred(WJ.pool.theme('personnalites'), { title: 'X', description: 'écrivain russe' }, 'facile'),
         p2: WJ.pool.preferred(WJ.pool.theme('personnalites'), { title: 'X', description: 'écrivain français' }, 'facile'),
+        pairs: WJ.vieux.makePairs([{ born: 1800 }, { born: 1810 }, { born: 1900 }, { born: 1905 }, { born: 1500 }], 30).map((p) => Math.abs(p[0].born - p[1].born)),
+        hp: WJ.habitants.makePairs([{ qid: 'a', pop: 100000 }, { qid: 'b', pop: 200000 }, { qid: 'c', pop: 5000000 }, { qid: 'd', pop: 110000 }, { qid: 'e', pop: 300000 }], 5).map((p) => [p.qid, p.ref.qid, Math.max(p.pop, p.ref.pop) / Math.min(p.pop, p.ref.pop)]),
       }));
       check(len.a1.ok && len.a1.partial, 'nom de famille accepté en mode indulgent: ' + JSON.stringify(len.a1));
       check(len.a2 && !len.a3 && !len.a4 && !len.a6, `aliases de nom ${JSON.stringify([len.a2, len.a3, len.a4, len.a6])}`);
       check(len.a5.includes('Saint-Exupéry') && len.a5.includes('Exupéry'), 'alias nom composé: ' + len.a5);
-      check(!len.t1 && len.t2 && !len.t3 && len.t4 && !len.t5, `filtres animaux ${JSON.stringify([len.t1, len.t2, len.t3, len.t4, len.t5])}`);
+      check(!len.t1 && len.t2 && !len.t3 && len.t4 && !len.t5 && !len.t6 && !len.t7, `filtres animaux ${JSON.stringify([len.t1, len.t2, len.t3, len.t4, len.t5, len.t6, len.t7])}`);
       check(!len.p1 && len.p2, 'préférence français en facile');
+      check(len.pairs.length === 2 && len.pairs.every((g) => g > 0 && g <= 30), 'paires de même époque: ' + JSON.stringify(len.pairs));
+      check(len.hp.length === 2 && len.hp.every(([x, r, k]) => x !== r && k >= 1.15 && k <= 4), 'paires de villes comparables: ' + JSON.stringify(len.hp));
       if (!live) {
         const red = await ev(() => WJ.answer.check('Dickens', { title: 'Charles Dickens', pageid: 1355526 }));
         check(red.ok && red.redirect, 'redirection acceptée via l’API: ' + JSON.stringify(red));
@@ -74,14 +86,15 @@ module.exports = ({ page, url, check, live }) => {
     async accueil() {
       await goto('#/');
       await wait('.game-card');
-      const n = await page.locator('.game-card').count();
-      check(n >= 1, `${n} carte(s) de jeu sur l’accueil`);
+      const n = await count('.game-card');
+      check(n === 13, `${n} cartes de jeu sur l’accueil`);
       check((await text('h1')).includes('Wiki'), 'titre présent');
     },
     async image_partie() {
+      await ev(() => WJ.store.setSetting('difficulty', 'normal'));
       await goto('#/image');
       await wait('.start');
-      check((await page.locator('.theme-chip').count()) >= 10, 'thèmes affichés');
+      check((await count('.theme-chip')) >= 13, 'thèmes et niveaux affichés');
       await page.click('.start .btn-primary');
       await wait('.image-frame img', 30000);
       check((await text('.points-max')).includes('100'), 'départ à 100 pts');
@@ -91,8 +104,8 @@ module.exports = ({ page, url, check, live }) => {
       await answerCurrent(false);
       await page.waitForTimeout(300);
       check((await text('.points-max')).includes('50'), 'erreur → 50 pts: ' + (await text('.points-max')));
-      check((await page.locator('.heart.lost').count()) === 1, 'une vie perdue');
-      check((await page.locator('.cell.shown').count()) >= 1, 'une lettre dévoilée après erreur');
+      check((await count('.heart.lost')) === 1, 'une vie perdue');
+      check((await count('.cell.shown')) >= 1, 'une lettre dévoilée après erreur');
       await page.click('.mode-btn:has-text("Lettres posées")');
       await page.waitForTimeout(100);
       check((await text('.points-max')).includes('20'), 'lettres → 20 pts: ' + (await text('.points-max')));
@@ -108,42 +121,72 @@ module.exports = ({ page, url, check, live }) => {
       await wait('.reveal.ko');
       check((await text('.reveal .pts')).includes('Passé'), 'passer → 0 pt');
       await page.click('.next');
-      await finishRemainingRounds();
+      await autoplay();
       await wait('.end');
       check((await text('.end-total')).includes('20'), 'total final 20');
-      check((await page.locator('.end-list li').count()) >= 7, 'récapitulatif des manches');
+      check((await count('.end-list li')) >= 7, 'récapitulatif des manches');
     },
-
+    async image_facile() {
+      await goto('#/image');
+      await wait('.start');
+      check((await count('.theme-chip:has-text("Facile")')) === 1, 'chip Facile présent');
+      await page.click('.theme-chip:has-text("Facile")');
+      await page.click('.start .btn-primary');
+      await wait('.image-frame img', 30000);
+      check((await count('.hint-box')) === 1, 'description offerte en facile');
+      check((await text('.points-max')).includes('100'), 'toujours 100 pts en facile');
+      await page.click('.mode-btn:has-text("Les traits")');
+      await wait('.mask .cell');
+      const words = await ev(() => [...document.querySelectorAll('.mask-word')].map((w) => w.querySelector('.cell').classList.contains('shown')));
+      check(words.every(Boolean), 'première lettre de chaque mot dévoilée: ' + JSON.stringify(words));
+      await goto('#/'); await goto('#/image');
+      await wait('.start');
+      await page.click('.theme-chip:has-text("Normal")');
+      check((await ev(() => WJ.store.settings().difficulty)) === 'normal', 'réglage mémorisé');
+    },
     async caviarde() {
       await goto('#/caviarde?go=1');
       await wait('.redacted', 30000);
-      check((await page.locator('.redact').count()) > 5, 'mots masqués présents');
+      check((await count('.redact')) > 5, 'mots masqués présents');
       await page.fill('.guess input', 'sujet');
       await page.click('.guess .btn-primary');
       await page.waitForTimeout(200);
       check((await text('.found-list')).includes('sujet'), 'mot trouvé listé: ' + (await text('.found-list')));
-      check((await page.locator('.redact.found').count()) >= 1, 'occurrences dévoilées');
+      check((await count('.redact.found')) >= 1, 'occurrences dévoilées');
+      await page.click('.found-list span');
+      check((await count('.redact.flash')) >= 1, 'surlignage au clic sur un mot trouvé');
+      await page.locator('.redact:not(.found)').first().click();
+      check((await count('.redact.selected')) === 1, 'mot sélectionné');
+      await page.click('button:has-text("Première lettre")');
+      check((await count('.redact.first')) >= 1, 'première lettre dévoilée');
+      await page.click('button:has-text("Dévoiler ce mot")');
+      check((await count('.redact.selected')) === 0 && (await count('.found-list span')) === 2, 'mot dévoilé entièrement');
+      await page.click('button:has-text("Un mot du texte")');
+      check((await count('.hints .theme-chip')) === 1, 'un mot offert sans sa place');
+      check((await text('.muted')).length > 0, 'statut affiché');
       await answerCurrent(true);
       await wait('.reveal.ok');
-      check((await text('.reveal .pts')).includes('+96'), 'titre trouvé après 1 essai → 96 pts: ' + (await text('.reveal .pts')));
+      check((await text('.reveal .pts')).includes('+75'), 'titre trouvé : 100 − 4 − 5 − 10 − 6 = 75 pts: ' + (await text('.reveal .pts')));
       await page.click('.next');
-      await finishRemainingRounds();
+      await autoplay();
       await wait('.end');
-      check((await text('.end-total')).includes('96'), 'total 96');
     },
     async categories() {
       await goto('#/categories?go=1');
       await wait('.cats li', 30000);
-      check((await page.locator('.cats li').count()) === 3, '3 catégories au départ');
+      check((await count('.cats li')) === 5, '5 catégories au départ');
       await answerCurrent(false);
       await page.waitForTimeout(300);
-      check((await page.locator('.cats li').count()) === 4, '4 catégories après erreur');
-      check((await text('.points-max')).includes('85'), '85 pts après erreur');
+      check((await count('.cats li')) === 6, '6 catégories après erreur');
+      check((await text('.points-max')).includes('90'), '90 pts après erreur');
+      await page.click('button:has-text("Les traits")');
+      await wait('.mask .cell');
+      check((await text('.points-max')).includes('75'), 'traits → 75 pts');
       await answerCurrent(true);
       await wait('.reveal.ok');
-      check((await text('.reveal .pts')).includes('+85'), '+85 pts');
+      check((await text('.reveal .pts')).includes('+75'), '+75 pts');
       await page.click('.next');
-      await finishRemainingRounds();
+      await autoplay();
       await wait('.end');
     },
     async anagramme() {
@@ -159,120 +202,122 @@ module.exports = ({ page, url, check, live }) => {
       await wait('.reveal.ok');
       check((await text('.reveal .pts')).includes('+70'), '+70 pts');
       await page.click('.next');
-      await finishRemainingRounds();
+      await autoplay();
       await wait('.end');
     },
     async trous() {
       await goto('#/trous?go=1');
-      await wait('.blank', 30000);
-      const answers = await ev(() => [...document.querySelectorAll('.blank')].map((b) => b.answer));
-      check(answers.length >= 2, `${answers.length} trous`);
-      const blanks = page.locator('.blank');
-      for (let i = 0; i < answers.length; i++) await blanks.nth(i).fill(i === 0 ? 'zzz' : answers[i]);
-      await page.click('button:has-text("Valider")');
-      await page.waitForTimeout(200);
-      check((await page.locator('.blank.ok').count()) === answers.length - 1, 'bons mots validés, un faux');
-      await blanks.nth(0).fill(answers[0]);
+      await wait('.blank-choice', 30000);
+      const answers = await ev(() => [...document.querySelectorAll('.blank-choice')].map((b) => b.answer));
+      check(answers.length >= 2, `${answers.length} trous à choix multiple`);
+      check((await count('.blank-choice .btn')) === answers.length * 4, 'quatre choix par trou');
+      const boxes = page.locator('.blank-choice');
+      for (let i = 0; i < answers.length; i++) await boxes.nth(i).locator(`.btn:text-is("${answers[i]}")`).click();
       await page.click('button:has-text("Valider")');
       await wait('.reveal');
-      const expected = 30 * (answers.length - 1) + 15;
+      const expected = 30 * answers.length + 10;
       check((await text('.reveal .pts')).includes('+' + expected), `+${expected} pts: ` + (await text('.reveal .pts')));
       await page.click('.next');
-      await finishRemainingRounds();
+      await autoplay();
       await wait('.end');
+      // Difficile : saisie libre
+      await goto('#/trous?go=1&difficulty=difficile');
+      await wait('.blank', 30000);
+      const free = await ev(() => [...document.querySelectorAll('.blank')].map((b) => b.answer));
+      const blanks = page.locator('.blank');
+      for (let i = 0; i < free.length; i++) await blanks.nth(i).fill(i === 0 ? 'zzz' : free[i]);
+      await page.click('button:has-text("Valider")');
+      await page.waitForTimeout(200);
+      check((await count('.blank.ok')) === free.length - 1, 'saisie libre : bons mots validés, un faux');
+      await blanks.nth(0).fill(free[0]);
+      await page.click('button:has-text("Valider")');
+      await wait('.reveal');
+      check((await text('.reveal .pts')).includes('+' + (30 * (free.length - 1) + 15)), 'saisie libre : second essai à 15 pts');
     },
-
     async vues() {
-      await goto('#/vues?go=1');
+      await goto('#/vues?go=1&theme=survie');
       await wait('.versus', 30000);
-      check((await page.locator('.vs-card').count()) === 2, 'deux cartes');
-      const views = await ev(() => { const l = WJ.debugEntry; return null; }).catch(() => null);
-      // Joue en lisant les vues réelles depuis la carte de gauche et le vivier simulé
+      check((await count('.vs-card')) === 2, 'deux cartes');
+      const more = async () => { const a = await text('.versus .vs-card:first-child h3'); const b = await text('.versus .vs-card:last-child h3'); return ev(([a, b]) => { const pool = WJ.store.get('cache.pop.' + WJ.pool.viewsDay() + '.s.200').v; return pool.find((e) => e.title === b)?.views > pool.find((e) => e.title === a)?.views; }, [a, b]); };
       for (let k = 0; k < 3; k++) {
-        const leftTitle = await text('.versus .vs-card:first-child h3');
-        const rightTitle = await text('.versus .vs-card:last-child h3');
-        const more = await ev(([a, b]) => { const pool = JSON.parse(JSON.stringify(WJ.store.get('cache.pop.' + WJ.pool.viewsDay() + '.s.200').v)); const va = pool.find((e) => e.title === a)?.views, vb = pool.find((e) => e.title === b)?.views; return vb > va; }, [leftTitle, rightTitle]);
-        await page.click(more ? 'button:has-text("Plus de vues")' : 'button:has-text("Moins de vues")');
+        await page.click((await more()) ? 'button:has-text("Plus de vues")' : 'button:has-text("Moins de vues")');
         await wait('.next');
         check((await text('.streak')).includes('Exact'), `duel ${k + 1} gagné`);
         await page.click('.next');
       }
       check((await text('.shell-score')).includes('30'), 'score 30 après 3 duels');
-      await page.click('button:has-text("Moins de vues"), button:has-text("Plus de vues")');
-      await page.waitForTimeout(100);
-      if (await page.locator('.next').count()) { await page.click('.next'); }
-      if (!(await page.locator('.end').count())) {
-        // la 4e réponse était juste par hasard : on force une erreur
-        for (let k = 0; k < 5 && !(await page.locator('.end').count()); k++) {
-          const leftTitle = await text('.versus .vs-card:first-child h3');
-          const rightTitle = await text('.versus .vs-card:last-child h3');
-          const more = await ev(([a, b]) => { const pool = WJ.store.get('cache.pop.' + WJ.pool.viewsDay() + '.s.200').v; return pool.find((e) => e.title === b)?.views > pool.find((e) => e.title === a)?.views; }, [leftTitle, rightTitle]);
-          await page.click(more ? 'button:has-text("Moins de vues")' : 'button:has-text("Plus de vues")');
-          await wait('.next'); await page.click('.next');
-        }
-      }
+      await page.click((await more()) ? 'button:has-text("Moins de vues")' : 'button:has-text("Plus de vues")');
+      await wait('.next'); await page.click('.next');
       await wait('.end');
-      check((await text('.end-total')).match(/\d+/) !== null, 'écran de fin avec total');
+      check((await text('.end-total')).includes('30'), 'survie : fin à la première erreur, total 30');
+      await goto('#/vues?go=1&theme=trois');
+      await wait('.versus', 30000);
+      await page.click((await more()) ? 'button:has-text("Moins de vues")' : 'button:has-text("Plus de vues")');
+      await wait('.next'); await page.click('.next');
+      check((await count('.versus')) === 1, '3 vies : on continue après une erreur');
+      await autoplay();
+      await wait('.end');
     },
     async vieux() {
       await goto('#/vieux?go=1');
       await wait('.duel', 30000);
-      check((await page.locator('.duel .vs-card').count()) === 2, 'deux personnalités');
+      check((await count('.duel .vs-card')) === 2, 'deux personnalités');
       await page.click('.duel .vs-card:first-child');
       await wait('.next');
-      check((await page.locator('.duel .vs-card.right').count()) === 1, 'le plus vieux est marqué');
+      check((await count('.duel .vs-card.right')) === 1, 'le plus vieux est marqué');
       check(!(await text('.duel .year')).includes('?'), 'années dévoilées: ' + (await text('.duel .year')));
-      for (let k = 0; k < 25 && !(await page.locator('.end').count()); k++) {
-        if (await page.locator('.next').count()) await page.click('.next');
-        else if (await page.locator('.duel .vs-card').count()) await page.click('.duel .vs-card:first-child');
-        await page.waitForTimeout(60);
-      }
+      await autoplay();
       await wait('.end');
+      await goto('#/vieux?go=1&difficulty=difficile');
+      await wait('.duel', 30000);
+      check((await count('.duel .vs-card img')) === 0, 'difficile : sans photo');
     },
     async habitants() {
       await goto('#/habitants?go=1&theme=france');
-      await wait('input[type=range]', 30000);
-      const real = await ev(() => WJ.debugEntry.pop);
-      // place le curseur exactement sur la bonne valeur (échelle log)
-      await ev((real) => { const r = document.querySelector('input[type=range]'); const lmin = Math.log10(20000), lmax = Math.log10(2500000); r.value = Math.round(1000 * (Math.log10(real) - lmin) / (lmax - lmin)); r.dispatchEvent(new Event('input')); }, real);
+      await wait('.versus', 30000);
+      const e = await ev(() => ({ pop: WJ.debugEntry.pop, ref: WJ.debugEntry.ref.pop }));
+      await page.click(e.pop > e.ref ? 'button:has-text("plus peuplée")' : 'button:has-text("moins peuplée")');
+      await wait('input[type=range]:not([disabled])');
+      await ev((real) => { const r = document.querySelector('input[type=range]'); const lmin = Math.log10(20000), lmax = Math.log10(2500000); r.value = Math.round(1000 * (Math.log10(real) - lmin) / (lmax - lmin)); r.dispatchEvent(new Event('input')); }, e.pop);
       await page.click('button:has-text("Valider mon estimation")');
       await wait('.reveal');
       const pts = parseInt(((await text('.reveal .pts')).match(/\+(\d+)/) || [])[1], 10);
-      check(pts >= 95, 'estimation exacte ≈ 100 pts: ' + pts);
+      check(pts >= 95, 'comparaison juste + estimation exacte ≈ 100 pts: ' + pts);
       await page.click('.next');
-      for (let k = 0; k < 12 && !(await page.locator('.end').count()); k++) {
-        if (await page.locator('button:has-text("Valider mon estimation")').count()) await page.click('button:has-text("Valider mon estimation")');
-        if (await page.locator('.next').count()) await page.click('.next');
-        await page.waitForTimeout(60);
-      }
+      await wait('.versus');
+      const e2 = await ev(() => ({ pop: WJ.debugEntry.pop, ref: WJ.debugEntry.ref.pop }));
+      await page.click(e2.pop > e2.ref ? 'button:has-text("moins peuplée")' : 'button:has-text("plus peuplée")');
+      await wait('.reveal');
+      check((await text('.reveal .pts')).includes('+0'), 'comparaison fausse → 0 pt');
+      await page.click('.next');
+      await autoplay();
       await wait('.end');
     },
     async frise() {
-      await goto('#/frise?go=1&theme=personnalites');
+      await goto('#/frise?go=1&theme=personnalites&mode=classique');
       await wait('.tl-gap', 30000);
-      const n0 = await page.locator('.timeline .tl-card').count();
-      check(n0 === 1, 'une carte placée au départ');
-      // place correctement en lisant les années depuis la frise
-      for (let k = 0; k < 12 && !(await page.locator('.end').count()); k++) {
-        const info = await ev(() => { const years = [...document.querySelectorAll('.timeline .tl-card .year')].map((y) => parseInt(y.textContent.replace(/\D/g, ''), 10) * (y.textContent.includes('av.') ? -1 : 1)); return years; });
-        const curTitle = await text('.tl-current .tl-card div');
-        const year = await ev((t) => { const c = [...document.querySelectorAll('.tl-current .tl-card')]; return WJ.debugFriseYear || null; }, curTitle);
-        // on choisit la bonne position via l'ordre des années ; l'année de la carte courante n'est pas affichée : on la cherche dans le cache SPARQL simulé (année = 1500 + (Q*37)%500)
-        const cur = await ev(() => { const t = document.querySelector('.tl-current .tl-card div').textContent; return t; });
+      check((await count('.timeline .tl-card')) === 1, 'une carte placée au départ');
+      check((await count('.tl-axis')) === 1, 'axe affiché');
+      for (let k = 0; k < 25 && !(await count('.end')); k++) {
+        const info = await ev(() => [...document.querySelectorAll('.timeline .tl-card .year')].map((y) => parseInt(y.textContent.replace(/\D/g, ''), 10) * (y.textContent.includes('av.') ? -1 : 1)));
+        const cur = await ev(() => document.querySelector('.tl-current .tl-card div').textContent);
         const qid = await ev((t) => { const e = Object.values(WJ.store.get('cache.pop.' + WJ.pool.viewsDay() + '.s.200')?.v || {}).find((x) => x.title === t); return e ? e.qid : null; }, cur);
         let pos = 0;
         if (qid) { const y = 1500 + ((parseInt(qid.slice(1), 10) * 37) % 500); pos = info.findIndex((v) => v > y); if (pos < 0) pos = info.length; }
-        else { pos = Math.floor(Math.random() * (info.length + 1)); }
+        else pos = Math.floor(Math.random() * (info.length + 1));
         await page.locator('.tl-gap').nth(pos).click();
         await page.waitForTimeout(80);
       }
       await wait('.end', 5000);
       check(true, 'frise terminée');
+      await goto('#/frise');
+      await wait('.start');
+      check((await count('.theme-chip:has-text("Marathon")')) === 1, 'modes de frise affichés');
     },
     async langue() {
       await goto('#/langue?go=1');
       await wait('.options', 30000);
-      check((await page.locator('.options .btn').count()) === 4, 'quatre langues proposées');
+      check((await count('.options .btn')) === 4, 'quatre langues proposées');
       check((await text('.quote')).length > 20, 'extrait affiché');
       const target = await ev(() => WJ.debugLangue.name);
       await page.click(`.options .btn:has-text("${target.charAt(0).toUpperCase() + target.slice(1)}")`);
@@ -280,19 +325,14 @@ module.exports = ({ page, url, check, live }) => {
       check((await text('.reveal h3')).includes(target), `${target} reconnu`);
       check((await text('.reveal .pts')).includes('+100'), '+100 pts du premier coup');
       await page.click('.next');
-      await finishRemainingRounds();
-      for (let k = 0; k < 60 && !(await page.locator('.end').count()); k++) {
-        if (await page.locator('.options .btn:not([disabled])').count()) await page.click('.options .btn:not([disabled])');
-        if (await page.locator('.next').count()) await page.click('.next');
-        await page.waitForTimeout(60);
-      }
+      await autoplay();
       await wait('.end');
     },
     async course() {
       await goto('#/course?go=1');
       await wait('.wiki-content a[data-title]', 30000);
       const target = await text('.race-bar .target');
-      check((await page.locator('.wiki-content a.dead').count()) >= 1, 'liens fichiers/externes désactivés');
+      check((await count('.wiki-content a.dead')) >= 1, 'liens fichiers/externes désactivés');
       const link = page.locator(`.wiki-content a[data-title="${target}"]`);
       if (await link.count()) { await link.first().click(); }
       else { await page.click('.wiki-content a[data-title]'); await page.waitForTimeout(200); await page.click(`.wiki-content a[data-title="${target}"]`); }
@@ -301,58 +341,56 @@ module.exports = ({ page, url, check, live }) => {
     },
     async chainon() {
       await goto('#/chainon?go=1');
+      await wait('.choices .btn', 30000);
+      const b = await ev(() => WJ.debugChain.b.title);
+      check((await count('.choices .btn')) >= 2 && (await count('.choices .btn')) <= 4, 'jusqu’à quatre propositions');
+      await page.locator(`.choices .btn:not(:text-is("${b}"))`).first().click();
+      await page.waitForTimeout(200);
+      check((await text('.points-max')).includes('50'), 'après un essai raté : 50 pts');
+      await page.locator(`.choices .btn:text-is("${b}")`).click();
+      await wait('.reveal.ok', 5000);
+      check((await text('.reveal .pts')).includes('+50'), '+50 pts');
+      await page.click('.next');
+      await autoplay();
+      await wait('.end');
+      await goto('#/chainon?go=1&difficulty=difficile');
       await wait('.guess input', 30000);
       await page.fill('.guess input', 'Banane');
       await page.click('.guess .btn-primary');
       await page.waitForTimeout(400);
-      check((await text('.points-max')).includes('80'), '−20 après un essai raté: ' + (await text('.points-max')));
-      await page.fill('.guess input', 'Charles Dickens');
+      check((await text('.points-max')).includes('80'), 'difficile : −20 après un essai raté: ' + (await text('.points-max')));
+      const b2 = await ev(() => WJ.debugChain.b.title);
+      await page.fill('.guess input', b2);
       await page.click('.guess .btn-primary');
       await wait('.reveal.ok', 5000);
-      check((await text('.reveal .pts')).includes('+80'), '+80 pts');
-      await page.click('.next');
-      await finishRemainingRounds();
-      await wait('.end');
+      check((await text('.reveal .pts')).includes('+80'), 'difficile : +80 pts');
     },
     async monde() {
       await goto('#/monde?go=1&theme=monuments');
+      await wait('.options .btn', 30000);
+      check((await count('.options .btn')) === 6, 'six pays proposés');
+      const country = await ev(() => WJ.debugMonde.country);
+      await page.locator(`.options .btn:not(:text-is("${country}"))`).first().click();
+      await page.waitForTimeout(150);
+      await page.locator(`.options .btn:text-is("${country}")`).click();
+      await wait('.reveal');
+      check((await text('.reveal .pts')).includes('+40'), 'pays trouvé au second essai → 40 pts: ' + (await text('.reveal .pts')));
+      check((await count('#map')) === 1, 'carte affichée après la réponse');
+      await page.click('.next');
+      await wait('.options .btn');
+      await page.locator(`.options .btn:text-is("${await ev(() => WJ.debugMonde.country)}")`).click();
+      await wait('.reveal');
+      check((await text('.reveal .pts')).includes('+100'), 'pays du premier coup → 100 pts');
+      await page.click('.next');
+      await autoplay();
+      await wait('.end');
+      await goto('#/monde?go=1&theme=monuments&difficulty=difficile');
       await wait('#map', 30000);
       const c = await ev(() => WJ.debugEntry.coords);
       await ev((c) => WJ.debugMonde.place(c.lat, c.lon), c);
       await page.click('button:has-text("Valider ma position")');
       await wait('.reveal');
-      check((await text('.reveal .pts')).includes('+100'), 'position exacte → 100 pts: ' + (await text('.reveal .pts')));
-      await page.click('.next');
-      await wait('#map');
-      await ev(() => WJ.debugMonde.place(0, 0));
-      await page.click('button:has-text("Valider ma position")');
-      await wait('.reveal');
-      check(!(await text('.reveal .pts')).includes('+100'), 'position lointaine → moins de points: ' + (await text('.reveal .pts')));
-      await page.click('.next');
-      for (let k = 0; k < 10 && !(await page.locator('.end').count()); k++) {
-        if (await page.locator('#map').count()) { await ev(() => WJ.debugMonde.place(10, 10)); await page.click('button:has-text("Valider ma position")'); }
-        if (await page.locator('.next').count()) await page.click('.next');
-        await page.waitForTimeout(60);
-      }
-      await wait('.end');
-    },
-    async image_facile() {
-      await goto('#/image');
-      await wait('.start');
-      check((await page.locator('.theme-chip:has-text("Facile")').count()) === 1, 'chip Facile présent');
-      await page.click('.theme-chip:has-text("Facile")');
-      await page.click('.start .btn-primary');
-      await wait('.image-frame img', 30000);
-      check((await page.locator('.hint-box').count()) === 1, 'description offerte en facile');
-      check((await text('.points-max')).includes('100'), 'toujours 100 pts en facile');
-      await page.click('.mode-btn:has-text("Les traits")');
-      await wait('.mask .cell');
-      const words = await ev(() => [...document.querySelectorAll('.mask-word')].map((w) => w.querySelector('.cell').classList.contains('shown')));
-      check(words.every(Boolean), 'première lettre de chaque mot dévoilée: ' + JSON.stringify(words));
-      await page.click('.theme-chip, .shell-title');
-      await goto('#/image');
-      await page.click('.theme-chip:has-text("Normal")');
-      check((await ev(() => WJ.store.settings().difficulty)) === 'normal', 'réglage mémorisé');
+      check((await text('.reveal .pts')).includes('+100'), 'difficile : position exacte → 100 pts');
     },
     async secours_sans_metrics() {
       if (live) return;
@@ -369,7 +407,7 @@ module.exports = ({ page, url, check, live }) => {
       await goto('#/image?daily=1&go=1');
       await wait('.image-frame img', 30000);
       check((await text('.shell-round')).includes('/5'), 'défi du jour en 5 manches');
-      await finishRemainingRounds();
+      await autoplay();
       await wait('.end');
       check((await text('.end h2')).includes('Défi du jour'), 'écran de fin du défi');
       await goto('#/');

@@ -149,7 +149,23 @@ main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 1rem 16p
 .redact { display: inline-block; background: var(--ink); color: transparent; border-radius: 3px; min-width: 1.2em; line-height: 1.1; user-select: none; vertical-align: baseline; }
 .redact.title { background: var(--accent); }
 .redact.found { background: var(--ok-soft); color: var(--ink); animation: pop .3s; }
-.redact.flash { background: var(--accent-soft); color: var(--ink); }
+.redact.flash { background: var(--accent); color: var(--accent-ink); }
+.redact.selected { outline: 3px solid var(--accent); outline-offset: 1px; }
+.redact.first { color: var(--bg); }
+.redact.first::first-letter { color: var(--accent); font-weight: 700; }
+.found-list span { cursor: pointer; }
+.found-list span.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.hints { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; }
+.choices { display: flex; flex-wrap: wrap; gap: .4rem; margin: .3rem 0 .8rem; }
+.choices .btn { border-radius: 12px; }
+.choices .btn.right { background: var(--ok-soft); border-color: var(--ok); }
+.choices .btn.wrong { background: var(--ko-soft); border-color: var(--ko); }
+.blank-choice { display: inline-flex; flex-wrap: wrap; gap: .3rem; vertical-align: middle; margin: 0 .2rem; }
+.blank-choice .btn { min-height: 34px; padding: .2rem .7rem; font-size: .95rem; border-radius: 10px; }
+.blank-choice .btn.right { background: var(--ok-soft); border-color: var(--ok); }
+.blank-choice .btn.wrong { background: var(--ko-soft); border-color: var(--ko); }
+.blank-choice .btn.picked { border-color: var(--accent); background: var(--accent-soft); }
+.modes-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .5rem; margin: .4rem 0 .8rem; }
 @keyframes pop { from { transform: scale(1.15); } to { transform: none; } }
 .found-list { display: flex; flex-wrap: wrap; gap: .3rem; margin: .5rem 0; }
 .found-list span { background: var(--bg-2); border: 1px solid var(--line); border-radius: 999px; padding: .1rem .6rem; font-size: .85rem; }
@@ -171,14 +187,14 @@ main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 1rem 16p
 /* Plus ou moins */
 .versus { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; align-items: stretch; }
 .vs-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; text-align: center; }
-.vs-card img { width: 100%; height: 160px; object-fit: cover; background: var(--bg-2); }
+.vs-card img { width: 100%; height: 200px; object-fit: contain; background: var(--bg-2); }
 .vs-card .vs-body { padding: .7rem; flex: 1; display: flex; flex-direction: column; gap: .3rem; }
 .vs-card h3 { font-size: 1.05rem; margin: 0; }
 .vs-views { font-size: 1.3rem; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
 .vs-actions { display: flex; flex-direction: column; gap: .4rem; margin-top: auto; }
 .streak { text-align: center; font-size: 1.1rem; margin: .5rem 0; }
 .streak b { color: var(--accent); font-size: 1.6rem; }
-@media (max-width: 480px) { .vs-card img { height: 120px; } }
+@media (max-width: 480px) { .vs-card img { height: 150px; } }
 
 /* Qui est le plus vieux */
 .duel { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
@@ -195,12 +211,17 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 /* Frise */
 .timeline { display: flex; gap: .3rem; overflow-x: auto; padding: .8rem .2rem 1rem; align-items: stretch; scroll-snap-type: x proximity; }
-.tl-card { flex: 0 0 150px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: .5rem; display: flex; flex-direction: column; gap: .3rem; font-size: .85rem; text-align: center; scroll-snap-align: center; }
-.tl-card img { width: 100%; height: 90px; object-fit: cover; border-radius: 8px; background: var(--bg-2); }
+.tl-card { flex: 0 0 160px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: .5rem; display: flex; flex-direction: column; gap: .3rem; font-size: .85rem; text-align: center; scroll-snap-align: center; box-shadow: var(--shadow); position: relative; }
+.tl-card img { width: 100%; height: 110px; object-fit: contain; border-radius: 10px; background: var(--bg-2); }
+.tl-card .year { background: var(--accent-soft); border-radius: 999px; padding: .1rem .6rem; align-self: center; }
+.tl-card.placed-ok .year { background: var(--ok-soft); color: var(--ok); }
+.tl-card.placed-ko .year { background: var(--ko-soft); color: var(--ko); }
+.tl-axis { height: 4px; background: linear-gradient(90deg, var(--line), var(--accent), var(--line)); border-radius: 2px; margin: .2rem .5rem; }
+.tl-ends { display: flex; justify-content: space-between; font-size: .75rem; color: var(--ink-2); padding: 0 .5rem; }
 .tl-card .year { font-weight: 800; color: var(--accent); font-size: 1.1rem; }
 .tl-card.placed-ok { border-color: var(--ok); }
 .tl-card.placed-ko { border-color: var(--ko); }
-.tl-gap { flex: 0 0 44px; border: 2px dashed var(--line); border-radius: 10px; background: transparent; cursor: pointer; color: var(--accent); font-size: 1.4rem; min-height: 120px; }
+.tl-gap { flex: 0 0 48px; border: 2px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); cursor: pointer; color: var(--accent); font-size: 1.6rem; font-weight: 700; min-height: 120px; opacity: .8; }
 .tl-gap:hover { border-color: var(--accent); background: var(--accent-soft); }
 .tl-current { display: flex; justify-content: center; margin: .5rem 0; }
 .tl-current .tl-card { flex-basis: 190px; border-color: var(--accent); }

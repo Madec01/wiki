@@ -10,28 +10,28 @@ Treize jeux en français construits sur Wikipédia, Wikimedia Commons et Wikidat
 | Jeu | Principe |
 | --- | --- |
 | 🖼️ **Devine l’image** | L’image principale d’un article s’affiche. Trois façons de répondre : *cash* (100 pts), *les traits* qui montrent le nombre de lettres (60 pts), *lettres posées* avec un tiers des lettres dévoilées (30 pts). Chaque erreur coûte 10 pts et une vie, façon pendu. Défi du jour partagé par tous les joueurs. |
-| 🕶️ **Résumé caviardé** | Le résumé est masqué mot par mot. Chaque mot proposé se dévoile partout. Trouve le titre en un minimum d’essais. |
-| 🗂️ **Les catégories** | Trois catégories d’un article, puis une de plus par erreur. |
+| 🕶️ **Résumé caviardé** | Le résumé est masqué mot par mot. Chaque mot proposé se dévoile partout. Indices : première lettre ou dévoilement d’un mot sélectionné, « un mot du texte » sans sa place, un mot offert tous les 5 essais ratés. Clique sur un mot trouvé pour surligner ses occurrences. |
+| 🗂️ **Les catégories** | Cinq catégories d’un article, puis une de plus par erreur. Indices : traits du titre, image, description. |
 | 🔀 **Anagramme** | Les lettres du titre sont mélangées mot par mot. Indices payants : image, description, premières lettres. |
-| ✍️ **Texte à trous** | Le début de l’article avec trois mots clés effacés (noms propres, dates, termes importants). |
+| ✍️ **Texte à trous** | Le début de l’article avec trois mots clés effacés, à choisir parmi quatre propositions (saisie libre en Difficile). |
 
 ### Comparer et classer
 | Jeu | Principe |
 | --- | --- |
-| 📈 **Plus ou moins de vues** | Lequel des deux articles a été le plus lu hier ? Série à rallonge. |
-| 🎂 **Qui est le plus vieux ?** | Deux personnalités, clique sur celle née en premier. Dates Wikidata. |
-| 🏘️ **Combien d’habitants ?** | Estime la population d’une ville au curseur logarithmique. Villes de France ou métropoles mondiales. |
-| 🕰️ **Frise chronologique** | Place chaque carte (naissance, sortie de film, construction…) au bon endroit dans la frise. |
+| 📈 **Plus ou moins de vues** | Lequel des deux articles a été le plus lu ? Modes 3 vies, Survie ou 10 duels. |
+| 🎂 **Qui est le plus vieux ?** | Deux personnalités de la même époque (moins de 30 ans d’écart en Normal, 12 ans et sans photo en Difficile), clique sur celle née en premier. |
+| 🏘️ **Combien d’habitants ?** | D’abord plus ou moins peuplée qu’une ville de référence (30 pts), puis estimation au curseur (jusqu’à 70 pts). |
+| 🕰️ **Frise chronologique** | Place chaque carte (naissance, sortie de film, construction…) au bon endroit dans la frise. Modes Classique, Marathon, Sans filet. |
 
 ### Explorer
 | Jeu | Principe |
 | --- | --- |
 | 🗣️ **Devine la langue** | Un article connu dans une autre langue, quatre propositions de même écriture. |
-| 🗺️ **Où dans le monde ?** | Une photo d’un lieu, plante ton épingle sur la carte. |
+| 🗺️ **Où dans le monde ?** | Une photo d’un lieu : dans quel pays ? Six propositions du même continent. En Difficile, plante ton épingle sur la carte. |
 | 🏁 **Course de liens** | Rejoins l’article cible en cliquant uniquement sur les liens internes. Clics et chrono. |
-| 🔗 **Le chaînon manquant** | Trouve un article qui relie A à C : A → ? → C. Toute solution valide est acceptée. |
+| 🔗 **Le chaînon manquant** | Trouve, parmi quatre, l’article qui relie A à C : A → ? → C. En Difficile, saisie libre et toute solution valide est acceptée. |
 
-Les thèmes (Populaire, Cinéma, Personnalités, Animaux, Villes, Pays, Monuments, Jeux vidéo, Musique, Peinture, Séries…) viennent des modèles d’infobox de Wikipédia, triés par nombre de liens entrants pour rester sur des sujets connus. Le thème « Populaire » utilise les pages les plus lues de l’avant-veille.
+Trois niveaux (Facile, Normal, Difficile) règlent la notoriété des sujets tirés et, selon le jeu, les indices offerts. Le thème Animaux ne propose que des espèces. Les thèmes (Populaire, Cinéma, Personnalités, Animaux, Villes, Pays, Monuments, Jeux vidéo, Musique, Peinture, Séries…) viennent des modèles d’infobox de Wikipédia, triés par nombre de liens entrants pour rester sur des sujets connus. Le thème « Populaire » utilise les pages les plus lues de l’avant-veille.
 
 ## Lancer en local
 

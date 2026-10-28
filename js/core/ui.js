@@ -160,8 +160,17 @@ WJ.ui = (() => {
   }
 
   /** Écran d'accueil d'un jeu : règles, choix du thème, lancer. */
-  function startScreen({ game, themes, defaultTheme, onStart, rules, extra, daily, difficulty: showDifficulty = false }) {
+  function startScreen({ game, themes, defaultTheme, onStart, rules, extra, daily, difficulty: showDifficulty = false, modes = null, defaultMode = null, modesLabel = 'Mode' }) {
     let theme = defaultTheme || (themes && themes[0]?.id);
+    let mode = defaultMode || (modes && modes[0]?.id);
+    const themeName = (id) => (themes || []).find((t) => t.id === id)?.name || WJ.pool.theme(id).name;
+    const modeHost = el('div');
+    function renderModes() {
+      modeHost.innerHTML = '';
+      if (!modes) return;
+      modeHost.append(el('h3', { text: modesLabel }), themePicker(modes, mode, (id) => { mode = id; renderModes(); updateBest(); }),
+        modes.find((m) => m.id === mode)?.desc ? el('p', { class: 'muted', style: { fontSize: '.85rem' }, text: modes.find((m) => m.id === mode).desc }) : null);
+    }
     let difficulty = WJ.store.settings().difficulty || 'normal';
     const diffHost = el('div');
     function renderDiff() {
@@ -170,9 +179,9 @@ WJ.ui = (() => {
       diffHost.append(el('h3', { text: 'Difficulté' }), themePicker(WJ.pool.DIFFICULTIES, difficulty, (id) => { difficulty = id; WJ.store.setSetting('difficulty', id); renderDiff(); updateBest(); }),
         el('p', { class: 'muted', style: { fontSize: '.85rem' }, text: WJ.pool.difficulty(difficulty).desc }));
     }
-    const variantOf = () => (showDifficulty && difficulty !== 'normal' ? `${theme}:${difficulty}` : theme);
+    const variantOf = () => [theme, modes ? mode : null, showDifficulty && difficulty !== 'normal' ? difficulty : null].filter(Boolean).join(':');
     const bestEl = el('p', { class: 'muted' });
-    const updateBest = () => { const b = WJ.store.best(game.id, variantOf()); bestEl.textContent = b ? `Record (${WJ.pool.theme(theme).name}${showDifficulty && difficulty !== 'normal' ? ', ' + difficulty : ''}) : ${WJ.util.fmtInt(b.score)} pts` : ''; };
+    const updateBest = () => { const b = WJ.store.best(game.id, variantOf()); bestEl.textContent = b ? `Record (${[themeName(theme), modes ? modes.find((m) => m.id === mode)?.name : null, showDifficulty && difficulty !== 'normal' ? difficulty : null].filter(Boolean).join(', ')}) : ${WJ.util.fmtInt(b.score)} pts` : ''; };
     updateBest();
     // Re-render simple du sélecteur à chaque clic
     let pickerHost = el('div');
@@ -181,7 +190,7 @@ WJ.ui = (() => {
       if (!themes) return;
       pickerHost.append(themePicker(themes, theme, (id) => { theme = id; renderPicker(); updateBest(); }));
     }
-    renderPicker(); renderDiff();
+    renderPicker(); renderModes(); renderDiff();
     const dailyDone = daily ? WJ.store.dailyResult(game.id, WJ.util.dayKey(0)) : null;
     return el('section', { class: 'start card' }, [
       el('h2', {}, [`${game.icon} ${game.name}`]),
@@ -189,11 +198,12 @@ WJ.ui = (() => {
       rules ? el('ul', { class: 'rules' }, rules.map((r) => el('li', { html: r }))) : null,
       themes ? el('h3', { text: 'Thème' }) : null,
       pickerHost,
+      modeHost,
       diffHost,
       bestEl,
       extra || null,
       el('div', { class: 'row' }, [
-        button('Jouer', () => onStart({ theme, difficulty: showDifficulty ? difficulty : 'normal' }), 'btn btn-primary btn-lg'),
+        button('Jouer', () => onStart({ theme, mode, difficulty: showDifficulty ? difficulty : 'normal' }), 'btn btn-primary btn-lg'),
         daily ? button(dailyDone ? `Défi du jour : ${WJ.util.fmtInt(dailyDone.total)} pts ✓` : '📅 Défi du jour', () => onStart({ theme: 'populaire', daily: true }), 'btn btn-lg' + (dailyDone ? ' done' : '')) : null,
       ]),
     ]);

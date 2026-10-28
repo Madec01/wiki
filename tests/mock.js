@@ -24,6 +24,9 @@ function fakePage(title, withImage = true) {
   return p;
 }
 // Redirections connues pour les tests
+const hash = (str) => { let h = 7; for (const ch of str) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+/** Graphe de liens déterministe : X pointe vers ~2/3 des pages connues, jamais vers « Banane ». */
+const linksOf = (title) => Object.keys(KNOWN).filter((k) => k !== title && k !== 'Banane' && hash(title + '→' + k) % 3 !== 0);
 const REDIRECTS = { 'Dickens': 'Charles Dickens', 'Tolstoi': 'Léon Tolstoï', 'Colomb': 'Christophe Colomb' };
 
 const EXTRACT = (t) => `${t} est un sujet encyclopédique important. Cet article décrit ${t} en détail, avec son histoire, sa géographie et sa culture. Beaucoup de personnes connaissent ${t} grâce à la télévision et aux livres publiés depuis le dix-neuvième siècle.`;
@@ -47,8 +50,15 @@ function handleActionApi(url) {
   if (action === 'query') {
     const prop = q.get('prop') || '';
     if (q.get('generator') === 'search') {
-      const pages = SEARCH.query.pages.map((p) => ({ ...p, coordinates: p.coordinates || [{ lat: 40 + (p.pageid % 20), lon: -5 + (p.pageid % 30), primary: true, globe: 'earth' }] }));
-      return { ...SEARCH, query: { pages } };
+      const offset = parseInt(q.get('gsroffset') || '0', 10);
+      let pages;
+      if (offset === 0) pages = SEARCH.query.pages.map((p) => ({ ...p, coordinates: p.coordinates || [{ lat: 40 + (p.pageid % 20), lon: -5 + (p.pageid % 30), primary: true, globe: 'earth' }] }));
+      else {
+        const titles = TOP.items[0].articles.map((a) => a.article.replace(/_/g, ' ')).filter((t) => !/:/.test(t));
+        const start = offset % Math.max(1, titles.length - 50);
+        pages = titles.slice(start, start + 50).map((t, i) => ({ ...fakePage(t), index: i + 1, description: 'personnalité de test ' + (i % 3 === 0 ? 'française' : 'russe') }));
+      }
+      return { batchcomplete: true, query: { pages } };
     }
     let titles = (q.get('titles') || '').split('|').filter(Boolean);
     const redirects = [];
@@ -58,11 +68,11 @@ function handleActionApi(url) {
       const p = { ...fakePage(t) };
       if (prop.includes('links')) {
         const want = (q.get('pltitles') || '').split('|').filter(Boolean);
-        const all = Object.keys(KNOWN); const seed = t.length; const subset = all.filter((k, idx) => (idx * 7 + seed) % 3 !== 0).slice(0, 60);
-        p.links = (want.length ? want.filter((w) => w !== 'Banane') : subset).map((title) => ({ ns: 0, title }));
+        const mine = linksOf(t);
+        p.links = (want.length ? want.filter((w) => mine.includes(w)) : mine.slice(0, 80)).map((title) => ({ ns: 0, title }));
       }
       if (prop.includes('extracts')) p.extract = EXTRACT(t);
-      if (prop.includes('categories')) p.categories = ['Catégorie:Article de qualité', `Catégorie:${t} dans l’art`, 'Catégorie:Patrimoine mondial', 'Catégorie:Monument historique', 'Catégorie:Architecture', 'Catégorie:Tourisme'].map((title) => ({ ns: 14, title }));
+      if (prop.includes('categories')) p.categories = ['Catégorie:Article de qualité', `Catégorie:${t} dans l’art`, 'Catégorie:Patrimoine mondial', 'Catégorie:Monument historique', 'Catégorie:Architecture', 'Catégorie:Tourisme', 'Catégorie:Édifice religieux', 'Catégorie:Naissance en 1850'].map((title) => ({ ns: 14, title }));
       if (prop.includes('langlinks')) p.langlinks = [{ lang: 'de', title: 'Eiffelturm', autonym: 'Deutsch', langname: 'allemand' }, { lang: 'en', title: 'Eiffel Tower', autonym: 'English', langname: 'anglais' }, { lang: 'es', title: 'Torre Eiffel', autonym: 'español', langname: 'espagnol' }, { lang: 'it', title: 'Torre Eiffel', autonym: 'italiano', langname: 'italien' }];
       return p;
     });
@@ -79,6 +89,10 @@ function sparqlMock(url) {
       item: { value: 'http://www.wikidata.org/entity/Q90' + i }, itemLabel: { value: n }, pop: { value: String(2000000 - i * 150000) }, deptLabel: { value: 'Département ' + i }, article: { value: 'https://fr.wikipedia.org/wiki/' + n }, img: { value: 'https://upload.wikimedia.org/fake/' + n + '.jpg' }, countryLabel: { value: 'France' },
     }));
     return { results: { bindings: rows } };
+  }
+  if (/P17/.test(query)) {
+    const countries = [['France', 'Europe'], ['Allemagne', 'Europe'], ['Italie', 'Europe'], ['Japon', 'Asie']];
+    return { results: { bindings: items.map((q) => { const [c, k] = countries[parseInt(q.slice(1), 10) % countries.length]; return { item: { value: 'http://www.wikidata.org/entity/' + q }, countryLabel: { value: c }, continentLabel: { value: k } }; }) } };
   }
   const rows = items.map((q, i) => {
     const year = 1500 + ((parseInt(q.slice(1), 10) * 37) % 500);

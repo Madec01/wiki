@@ -37,8 +37,9 @@ WJ.pool = (() => {
     const d = e.description || '';
     if (/^(page d'homonymie|liste |catégorie|redirection)/i.test(d)) return false;
     if (th.id === 'animaux') {
-      if (TAXON_RANK.test(d) || LATIN_SUFFIX.test(e.title)) return false;
-      if (diff === 'facile' && (LATIN_BINOMIAL.test(e.title) || !/espèce/i.test(d))) return false;
+      // Seulement des espèces (ou races) : la description Wikidata dit « espèce de mammifères », « race de chiens »…
+      if (TAXON_RANK.test(d) || LATIN_SUFFIX.test(e.title) || !/\b(espèce|race|sous-espèce)\b/i.test(d)) return false;
+      if (diff !== 'difficile' && LATIN_BINOMIAL.test(e.title)) return false;
     }
     return true;
   }
