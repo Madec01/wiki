@@ -10,6 +10,7 @@ WJ.ui = (() => {
 
   function toast(message, kind = 'info', ms = 2600) {
     const host = $('#toasts');
+    while (host.children.length >= 2) host.firstChild.remove(); // pas d'empilement
     const t = el('div', { class: `toast toast-${kind}`, role: 'status', text: message });
     host.append(t);
     requestAnimationFrame(() => t.classList.add('show'));
