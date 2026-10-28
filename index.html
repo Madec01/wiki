@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WikiJeux</title>
+<meta name="description" content="Des jeux pour deviner Wikipédia : devine l’image, résumé caviardé, course de liens, frise chronologique et bien d’autres.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15130f" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2315130f'/%3E%3Ctext x='32' y='44' font-size='36' text-anchor='middle' font-family='Georgia,serif' fill='%23f2c14e'%3EW%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="#/" class="brand">Wiki<span class="accent">Jeux</span></a>
+  <button id="theme-toggle" class="icon-btn" type="button" title="Clair / sombre" aria-label="Basculer le thème">◐</button>
+</header>
+<main id="app"><div class="loading"><div class="spinner"></div><p>Chargement…</p></div></main>
+<footer class="site-footer">
+  <p>Contenus : <a href="https://fr.wikipedia.org" target="_blank" rel="noopener">Wikipédia</a> · <a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Commons</a> · <a href="https://www.wikidata.org" target="_blank" rel="noopener">Wikidata</a> (CC BY-SA). Code : <a href="https://github.com/Madec01/wiki" target="_blank" rel="noopener">GitHub</a>.</p>
+</footer>
+<div id="toasts" aria-live="polite"></div>
+
+<script src="js/core/util.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/api.js"></script>
+<script src="js/core/answer.js"></script>
+<script src="js/core/text.js"></script>
+<script src="js/core/pool.js"></script>
+<script src="js/core/ui.js"></script>
+<script src="js/core/game.js"></script>
+<script src="js/games/image.js"></script>
+<script src="js/games/caviarde.js"></script>
+<script src="js/games/categories.js"></script>
+<script src="js/games/anagramme.js"></script>
+<script src="js/games/trous.js"></script>
+<script src="js/games/vues.js"></script>
+<script src="js/games/vieux.js"></script>
+<script src="js/games/habitants.js"></script>
+<script src="js/games/frise.js"></script>
+<script src="js/games/langue.js"></script>
+<script src="js/games/monde.js"></script>
+<script src="js/games/course.js"></script>
+<script src="js/games/chainon.js"></script>
+<script src="js/core/app.js"></script>
+</body>
+</html>
