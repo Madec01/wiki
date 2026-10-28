@@ -115,6 +115,13 @@ main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 1rem 16p
 .cell.found { color: var(--ok); border-bottom-color: var(--ok); }
 @media (max-width: 420px) { .cell { width: 1.15rem; height: 1.7rem; font-size: 1rem; } }
 
+.keyboard { display: flex; flex-wrap: wrap; gap: .3rem; justify-content: center; margin: .4rem 0 .8rem; }
+.key { width: 2.15rem; height: 2.5rem; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2); color: var(--ink); font-weight: 700; cursor: pointer; font-family: var(--mono); font-size: 1rem; }
+.key:hover { border-color: var(--accent); }
+.key:disabled { cursor: default; opacity: .9; }
+.key.ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.key.ko { background: var(--ko-soft); border-color: var(--ko); color: var(--ko); opacity: .6; }
+@media (max-width: 420px) { .key { width: 1.95rem; height: 2.3rem; font-size: .9rem; } }
 .guess { display: flex; gap: .5rem; position: relative; flex-wrap: wrap; }
 .guess input, .input { flex: 1 1 200px; min-width: 0; padding: .7rem .9rem; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-2); color: var(--ink); font: inherit; font-size: 1.05rem; }
 .guess input:focus, .input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
@@ -155,6 +162,8 @@ main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 1rem 16p
 .redact.first::first-letter { color: var(--accent); font-weight: 700; }
 .redact.title.first { color: var(--accent); }
 .redact.title.first::first-letter { color: var(--accent-ink); }
+.redact.plain, .redact.plain.found { background: transparent; color: inherit; animation: none; }
+.redact.title.plain { color: var(--accent); font-weight: 700; }
 .found-list span { cursor: pointer; }
 .found-list span.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .hints { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; }

@@ -213,7 +213,7 @@ WJ.ui = (() => {
     return new Promise((resolve) => {
       const b = button(label, () => { b.disabled = true; resolve(); }, 'btn btn-primary btn-lg next');
       container.append(el('div', { class: 'row center' }, [b]));
-      b.focus();
+      b.focus({ preventScroll: true });
     });
   }
 

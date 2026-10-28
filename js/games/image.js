@@ -9,6 +9,8 @@
   const PENALTY = 10;
   const LIVES = 5;
   const HINT_COST = 15;
+  const LETTER_PENALTY = 5;
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
   async function playRound({ entry, nextEntry, content, difficulty = 'normal' }) {
     const easy = difficulty === 'facile';
@@ -17,8 +19,10 @@
     const title = WJ.answer.displayTitle(entry.title);
     const target = { title: entry.title, pageid: entry.pageid, aliases: [title] };
     const random = rng(entry.title + '|lettres');
-    let mode = 'cash', cap = MODES.cash.max, errors = 0, lives = LIVES, hintUsed = false, finished = false;
+    let mode = 'cash', cap = MODES.cash.max, errors = 0, letterErrors = 0, lives = LIVES, hintUsed = false, finished = false;
     const revealed = new Set();
+    const usedLetters = new Map(); // lettre normalisée → true (présente) / false (absente)
+    const keyboard = el('div', { class: 'keyboard' });
 
     // --- éléments
     const frame = el('div', { class: 'image-frame' }, [WJ.ui.image(entry.image, 'Image mystère')]);
@@ -34,7 +38,9 @@
     const pass = WJ.ui.button('Je passe', () => finish(false, true), 'btn btn-ghost');
     const form = el('div', { class: 'guess' }, [acHost, validate, pass]);
     const result = el('div');
-    const points = () => Math.max(0, cap - errors * PENALTY - (hintUsed ? hintCost : 0));
+    const points = () => Math.max(0, cap - errors * PENALTY - letterErrors * LETTER_PENALTY - (hintUsed ? hintCost : 0));
+    const titleLetters = () => WJ.answer.letterIndexes(title);
+    const norm1 = (c) => WJ.answer.normalize(c).replace(/ /g, '');
 
     function renderStatus() {
       ptsEl.innerHTML = `Jusqu’à <span class="pts">${points()}</span> pts`;
@@ -45,12 +51,45 @@
       maskHost.innerHTML = '';
       if (mode === 'cash') return;
       maskHost.append(WJ.ui.maskView(WJ.answer.mask(title, revealed)));
+      renderKeyboard();
+    }
+    function renderKeyboard() {
+      keyboard.innerHTML = '';
+      if (mode === 'cash' || finished) return;
+      const known = new Set(titleLetters().filter((i) => revealed.has(i)).map((i) => norm1(title[i])));
+      ALPHABET.forEach((L) => {
+        const n = L.toLowerCase();
+        const state = usedLetters.has(n) ? (usedLetters.get(n) ? 'ok' : 'ko') : known.has(n) ? 'ok' : '';
+        keyboard.append(el('button', { class: 'key ' + state, type: 'button', text: L, disabled: !!state, 'aria-label': `Lettre ${L}`, onclick: () => guessLetter(n) }));
+      });
+    }
+    /** Pendu : une lettre présente se dévoile partout (gratuit), une lettre absente coûte quelques points. */
+    function guessLetter(ch) {
+      if (finished) return;
+      const n = norm1(ch);
+      if (!n || n.length !== 1) return;
+      if (mode === 'cash') { WJ.ui.toast('Passe aux traits pour jouer les lettres.', 'warn', 1600); return; }
+      const known = new Set(titleLetters().filter((i) => revealed.has(i)).map((i) => norm1(title[i])));
+      if (usedLetters.has(n) || known.has(n)) { WJ.ui.toast('Lettre déjà jouée.', 'info', 900); return; }
+      const hits = titleLetters().filter((i) => norm1(title[i]) === n);
+      usedLetters.set(n, hits.length > 0);
+      if (hits.length) {
+        hits.forEach((i) => revealed.add(i));
+        WJ.ui.toast(`Oui ! ${hits.length} fois.`, 'ok', 900);
+      } else {
+        letterErrors++;
+        WJ.ui.toast(`Pas de ${ch.toUpperCase()}… −${LETTER_PENALTY} pts`, 'ko', 1100);
+      }
+      renderStatus(); renderMask(); renderModes();
+      if (titleLetters().every((i) => revealed.has(i))) { WJ.ui.toast('Titre complet !', 'ok'); return finish(true); }
+      if (points() <= 0) return finish(false);
+      input.focus({ preventScroll: true });
     }
     function renderModes() {
       modeLine.innerHTML = '';
       const btn = (id) => {
         const m = MODES[id];
-        const reachable = Math.max(0, Math.min(cap, m.max) - errors * PENALTY - (hintUsed ? hintCost : 0));
+        const reachable = Math.max(0, Math.min(cap, m.max) - errors * PENALTY - letterErrors * LETTER_PENALTY - (hintUsed ? hintCost : 0));
         return el('button', { class: 'mode-btn', type: 'button', disabled: mode === id || (mode === 'lettres'), onclick: () => switchMode(id) }, [
           el('b', { text: (id === 'traits' ? '▁▁▁ ' : '▁A▁ ') + m.label }), el('small', { text: `jusqu’à ${reachable} pts · ${m.hint}` }),
         ]);
@@ -84,6 +123,7 @@
       if (finished) return;
       const v = String(value || '').trim();
       if (!v) return input.focus();
+      if ([...v].length === 1 && /[\p{L}\p{N}]/u.test(v)) { input.value = ''; return guessLetter(v); }
       validate.disabled = true;
       const verdict = await WJ.answer.check(v, target, { lenient: true });
       validate.disabled = false;
@@ -114,7 +154,7 @@
       if (finished) return;
       finished = true;
       const pts = ok ? points() : 0;
-      form.remove(); modeLine.remove(); maskHost.innerHTML = '';
+      form.remove(); modeLine.remove(); maskHost.innerHTML = ''; keyboard.remove();
       WJ.answer.letterIndexes(title).forEach((i) => revealed.add(i));
       result.append(el('div', { class: 'reveal ' + (ok ? 'ok' : 'ko') }, [
         el('h3', { text: entry.title }),
@@ -126,7 +166,7 @@
       WJ.ui.waitNext(result).then(() => resolveRound({ ok, points: pts, title: entry.title, emoji, label: `${entry.title}${ok ? ` (${MODES[mode].label.toLowerCase()})` : ''}` }));
     }
 
-    content.append(frame, el('div', { class: 'points-line' }, [ptsEl, heartsEl]), modeLine, maskHost, hintHost, form, result);
+    content.append(frame, el('div', { class: 'points-line' }, [ptsEl, heartsEl]), modeLine, maskHost, keyboard, hintHost, form, result);
     WJ.ui.autocomplete(input, { onSubmit: submit });
     renderStatus(); renderModes();
     if (easy) showHint();
@@ -141,7 +181,8 @@
       '<b>Réponse cash</b> : tu connais, tu tapes, 100 pts.',
       '<b>Les traits</b> : le nombre de lettres s’affiche, 60 pts max.',
       '<b>Lettres posées</b> : un tiers des lettres est dévoilé, 30 pts max.',
-      `Chaque erreur coûte ${PENALTY} pts et une vie sur ${LIVES}, et dévoile une lettre de plus en mode traits ou lettres.`,
+      `Chaque mauvaise réponse coûte ${PENALTY} pts et une vie sur ${LIVES}, et dévoile une lettre de plus en mode traits ou lettres.`,
+      `Façon pendu : avec les traits, tape ou clique une lettre. Présente, elle s’affiche partout gratuitement ; absente, −${LETTER_PENALTY} pts. Titre complet = gagné.`,
       'Les redirections comptent : « Napoléon » vaut « Napoléon Ier », et le nom de famille suffit pour une personne.',
       'Mode facile : sujets les plus connus, description offerte, première lettre de chaque mot dévoilée avec les traits.',
     ],
